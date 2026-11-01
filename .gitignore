@@ -1,0 +1,17 @@
+# 运行时数据（含个人关注清单与推送台账，不要提交）
+pushed.jsonl
+pushed-wool.jsonl
+skipped.log
+raw/
+watchlist.md
+cookies/
+browser-profile*/
+browser-profiles/
+
+# Python
+__pycache__/
+*.pyc
+
+# 系统
+.DS_Store
+Thumbs.db
