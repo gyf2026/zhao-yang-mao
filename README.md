@@ -2,7 +2,9 @@
 
 > 一个给 WorkBuddy / Claude Code 用的技能（Skill）：在什么值得买、慢慢买、赚客吧、V2EX、LINUX DO、X（Twitter）等站点巡查**好价与羊毛**——错价、历史新低、大额券、免费试用、AI 免费额度，也可以只盯你关心的那个品类。
 
-**全程只读**：只报告，不下单、不领券、不加购、不发帖。登录由你自己在浏览器里完成。
+**全程只读**：只报告，不下单、不领券、不加购、不发帖。登录由你自己在浏览器里完成 —— **技能不保存你的账号密码**，只在登录成功后存一份 cookie 用于下次免登。
+
+**同款只推一次**：同一个商品（换店铺、换链接、换标题都算）推过就不再推，除非这次价格真的更低。扫到的全部候选都会记进台账，你以后问"上次那个多少钱"随时能查回来。
 
 ---
 
@@ -31,6 +33,8 @@
 
 **1. 电脑不能关机、不能睡眠**
 
+**一旦休眠，这一轮扫描就不会执行**——睡眠时进程冻结、网络断开，浏览器和脚本都起不来，而且**不会醒来补跑**，只是白白错过这一轮。不是"晚点再扫"，是这一轮直接没了。
+
 | 系统 | 必做设置 |
 |---|---|
 | macOS | 插电源、别合盖（**笔记本合盖默认必睡**）；需要长时间守候可挂 `caffeinate -dimsu` |
@@ -38,7 +42,7 @@
 
 **2. 代理软件要保持运行**（Clash / v2rayN 等），否则 X、Slickdeals、DealMoon 全部拉不到；建议设开机自启。
 
-**3. 登录态会过期**。首次登录后立刻存 cookie；识别到登录墙会跳过本轮、不推半成品，并在下次成功运行时提醒你重新登录。
+**3. 登录态会过期，但你的密码不经手**。登录是你在浏览器窗口里自己扫码/输验证码完成的；技能只在登录成功后导出 cookie 存在本机，下次用 cookie 免登。识别到登录墙会跳过本轮、不推半成品，并在下次成功运行时提醒你重新登录。
 
 **排班建议**：每 2 小时一轮、只跑 08:00–23:00。好价通常几小时就被抢完，过密只增加风控风险；夜间没有新爆料。大促日可临时调到 1 小时。
 
@@ -65,7 +69,34 @@ git clone https://github.com/gyf2026/zhao-yang-mao.git "%USERPROFILE%\.workbuddy
 python3 scripts/ledger.py init      # Windows 用 python
 ```
 
-会在 `~/.workbuddy/deal-hunter/` 下建 `watchlist.md`、`pushed.jsonl`、`raw/`。
+会在 `~/.workbuddy/deal-hunter/` 下建 `watchlist.md`、`pushed.jsonl`、`pushed-wool.jsonl`、`scan.jsonl`、`raw/`。
+
+---
+
+## 台账：同款只推一次，历史随时能查
+
+两个台账文件，各管一件事：
+
+| 文件 | 记什么 | 干什么用 |
+|---|---|---|
+| `pushed.jsonl` / `pushed-wool.jsonl` | 推过的商品 + 商品键 + 价格 | 判"同款推过没有、这次是不是真更便宜" |
+| `scan.jsonl` | **扫到的全部候选**，含没推的、剔除原因 | 你以后问"上次那个多少钱""怎么没推"时查回来 |
+
+```bash
+# 判能不能推（退出码 1 = 同款推过且不更便宜，不推）
+python3 scripts/ledger.py check --title "雅培瞬感3代 动态血糖仪" --product "雅培瞬感3代" --price 499
+
+# 记账：推了的写 add，没推的写 scan（带原因）
+python3 scripts/ledger.py add  --type 好价 --title "…" --product "…" --price 499 --url "…" --site smzdm
+python3 scripts/ledger.py scan --site smzdm --keyword 动态血糖仪 --title "…" --price 899 \
+        --label "365天新低" --status rejected --reason "需凑单2件才优惠" --url "…"
+
+# 你回问的时候查
+python3 scripts/ledger.py query "血糖仪"        # 命中记录 + 历史最低价
+python3 scripts/ledger.py history "雅培瞬感3代"  # 单品价格变化史
+```
+
+判定按**商品**不按链接：同款换家店、换个链接、改个标题，照样算推过。脚本会自动去营销词、把"三代"和"3 代"归一、合并品牌中英文（Apple=苹果），但会用型号词把 `iPhone 15` 和 `15 Pro`、单套和 2 个装分开。更低价再推的门槛是**再低 1% 且至少低 1 元**，挡掉换券造成的假降价。
 
 ---
 
@@ -81,8 +112,8 @@ python3 scripts/smzdm_feed.py --detail https://www.smzdm.com/p/12345678/
 # 3. 随机延迟（定时巡检用，反风控）
 python3 scripts/ledger.py jitter --min 60 --max 540
 
-# 4. 去重检查（退出码 1 = 推过了）
-python3 scripts/ledger.py check "https://www.smzdm.com/p/12345678/" --kind deal
+# 4. 同款去重（退出码 1 = 同款推过且不更便宜，不推）
+python3 scripts/ledger.py check --title "雅培瞬感3代 动态血糖仪" --product "雅培瞬感3代" --price 499
 ```
 
 浏览器部分（搜索页、X、Cloudflare 站点）需要真 Chrome + CDP 直控：
@@ -124,7 +155,7 @@ deal-hunter/
 │   ├── reporting.md             汇报规范（先问后查、三要素、确定性分档）
 │   └── automation-prompt.md     定时任务提示词模板
 ├── scripts/
-│   ├── ledger.py                台账去重 / 随机延迟 / 快照路径（跨平台）
+│   ├── ledger.py                商品级去重 / 扫描台账 / 回查 / 随机延迟（跨平台）
 │   ├── smzdm_feed.py            smzdm 列表与详情直连解析（跨平台）
 │   └── browser_cdp.ps1          Windows 浏览器启动/探活/关闭
 └── assets/
@@ -176,9 +207,10 @@ Windows 十条必看：`python3`→`python`、`curl`→`curl.exe`、bypass 用�
 ## 红线
 
 - 只读，不下单、不领券、不加购、不发帖、不点赞、不关注、不私信
-- 不索要账号密码，不代收验证码，不切换账号
+- **不索要、不保存账号密码**，不代收验证码，不切换账号；只用你自己登录后留下的 cookie 免登
 - 核验过时效才推，宁可少推不推死链
-- 抓不到就说抓不到，不虚构价格和历史低价
+- 同款只推一次，除非真降价
+- 扫到的都记台账，问得回来；查不到就说没扫到，不虚构价格和历史低价
 
 ---
 

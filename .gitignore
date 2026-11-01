@@ -1,6 +1,7 @@
-# 运行时数据（含个人关注清单与推送台账，不要提交）
+# 运行时数据（含个人关注清单、推送与扫描台账、登录 cookie，不要提交）
 pushed.jsonl
 pushed-wool.jsonl
+scan.jsonl
 skipped.log
 raw/
 watchlist.md
