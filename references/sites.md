@@ -13,16 +13,50 @@
 
 | 项 | 内容 |
 |---|---|
-| 入口 | 首页 `https://www.smzdm.com/`；好价频道 `https://www.smzdm.com/jingxuan/`；搜索 `https://search.smzdm.com/?c=home&s=<关键词>&order=time` |
-| 通道 | 列表/详情 → 直连脚本 `scripts/smzdm_feed.py`；**搜索 → 必须真浏览器** |
+| 入口 | **全部好价 `https://faxian.smzdm.com/`（主力）**；精选 `https://www.smzdm.com/jingxuan/`；搜索 `https://search.smzdm.com/?c=home&s=<关键词>&order=time` |
+| 通道 | 列表 → 直连脚本 `scripts/smzdm_feed.py`（faxian 优先）；**搜索 → 必须真浏览器**；详情页被验证码拦时也转浏览器 |
 | 登录 | 可选。不登录能搜能看，登录后结果更稳、能看到更多评论 |
+
+### 频道地图：精选不是全量
+
+站内有五个互不相同的入口，**只扫精选会漏掉一大半**。2026-11-01 同一时刻对比：精选 72 条，首页 68 条里 44 条不在精选内；排行榜 56/72 不在精选内；商城页、海淘页的条目 100% 不在精选内。
+
+| 频道 | 地址 | 结构特征 | 定位 |
+|---|---|---|---|
+| **全部好价** | `faxian.smzdm.com/` | `feed-block-ver`，默认 `data-tab="最新"`，带「优惠精选 / 小值爆料 / 百亿补贴」角标 | **每轮主力** |
+| 全部好价·翻页 | `faxian.smzdm.com/p2/` | 同结构 | 第 2 页起 |
+| 全部好价·品类 | `faxian.smzdm.com/h1s0t0f<品类ID>c0p<页码>/` | 同结构 | 定向盯品类 |
+| 精选好价 | `www.smzdm.com/jingxuan/` | `feed-block z-hor-feed`，字段在内嵌 `sensors.track` 里，**有值/不值票数** | 质量旁证（票数只在这里有） |
+| 白菜 9.9 | `faxian.smzdm.com/9kuai9/` | 同 faxian | 低价小件，默认不推 |
+| 优惠券 | `duihuan.smzdm.com/quan/` | 券卡片列表 | B 类羊毛，多数券要登录 |
+| 排行榜 | `www.smzdm.com/top/` | 商品榜 | 查常卖价参考，**不是时效好价** |
+| 海淘 | `haitao.smzdm.com` | 海淘精选 / 限免 | 0 元 App 限免在这里出过 |
+| 商城页 | `www.smzdm.com/mall/<商城>/` | 店铺聚合 | 商城专属券，补漏 |
+
+品类 ID：`python3 scripts/smzdm_feed.py --channels` 可直接打印（电脑数码 163、食品生鲜 95、日用百货 1515、家用电器 27、手机 165…）。
+
+**两种列表结构的区别（决定解析器）**：faxian 用 `div.feed-block-ver` + `h5.feed-ver-title` + `div.z-highlight`，没有票数、有角标；精选用 `div.feed-block z-hor-feed` + 内嵌 `sensors.track('FeedArticleClick',{...})`，有票数、无角标。脚本按页面里是否含 `feed-block-ver` 自动切换。
 
 **建议操作**
 
-1. 先用脚本抓列表拿大盘：`python3 scripts/smzdm_feed.py https://www.smzdm.com/jingxuan/ --save <快照路径>`，一页约 20 条。
+1. 先抓全部好价：`python3 scripts/smzdm_feed.py --channel all --page 1 --save <快照路径>`，一页约 20 条；需要更多就 `--page 2`。
 2. 关注清单里的品类，用浏览器开搜索页，**一定带 `&order=time` 按时间排序**，否则默认综合排序会把几天前的老帖顶到前面。
 3. 每个关键词最多翻 1 页。辅词每轮轮换 2–3 个，别一次全跑完。
 4. 候选进推送前，先跑 `--detail` 查过期，再开商城原链接核价核库存。
+
+**详情页被拦时的浏览器核验（跑这一段）**
+
+```bash
+cd ~/.workbuddy/skills/browser-cdp-control/scripts
+export CDP_PORT=9315 NODE_PATH=/Users/fgy/.workbuddy/binaries/node/workspace/node_modules
+node cdp.js newtab "https://www.smzdm.com/p/185236762/"     # 开新标签，不抢已有页
+node cdp.js list                                            # 取 targetId
+node cdp.js eval <id> 'document.title'                       # 标题里带 "【省X元】"
+node cdp.js eval <id> 'document.body.innerText.replace(/\n+/g," / ").slice(0,400)'
+```
+
+正文里同时能看到：更新时间（`更新时间：23:10`）、值/不值票数、优惠构成（立减/满减券/淘金币）、爆料原文。
+**看到"来晚了~优惠已错过"就是过期**，直接丢。拿不到正文就当未核验，不许推。
 
 **抓什么**
 
@@ -33,6 +67,7 @@
 **坑（都踩过）**
 
 - **搜索页直连拿不到**：`search.smzdm.com` 对 curl 返回 202 + `probe.js` 挑战页，正文是空的。看到 202 就别再试直连了，直接上浏览器。
+- **验证码会伪装成成功**：抓太勤时 `www.smzdm.com` 返回腾讯 TCaptcha 页，HTTP 200、约 1.7KB，`<title>` 为空。这时旧逻辑会判 `expired=false` 放行，等于把没核验过的当已核验。脚本现在抛 `Blocked`（退出码 2）。**注意 `faxian` 与 `www` 是分开拦的**，一个被拦另一个往往还能用。
 - **过期判定有假信号**：详情页里每个帖子都藏着一段"无货或下架"的隐藏报错模板，拿它当过期依据会全部误杀。真标记是 `card-bottom-overdue` + 文案"来晚了~优惠已错过"。
 - **跳转链接不是商品链接**：站点内的 `go.smzdm.com/xxx` 是跳转，核价要点进去到商城真实页面，否则看不到实时价和库存。
 - **改版会让解析归零**：脚本返回 0 条就是改版了，别硬跑，改走浏览器并提示更新脚本。

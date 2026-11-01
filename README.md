@@ -8,6 +8,8 @@
 
 **内容太多怎么选**：什么值得买一页 20 条，全推等于刷屏。技能里写死了五道闸——门槛 → 新鲜度（超 12 小时不推）→ 同款合并 → 打分排序 → 限额（3 条、单品类 2 条）。顺序和权重都固定，同输入必得同输出，不存在"先抓到谁推谁"。
 
+**扫的不是一个频道**：精选好价只是全部好价的人工子集。同一时刻对比，首页 65%、排行榜 78% 的条目在精选里找不到，商城页和海淘页更是 100% 不重合。所以主力源是 `faxian.smzdm.com`（全部好价，默认最新、可翻页、可按品类），精选用来看值/不值票数做质量旁证，另有白菜、优惠券、海淘、商城页按需补。
+
 ---
 
 ## 它能干什么
@@ -107,8 +109,11 @@ python3 scripts/ledger.py history "雅培瞬感3代"  # 单品价格变化史
 ## 快速开始
 
 ```bash
-# 1. 抓什么值得买好价列表（直连，不用浏览器）
-python3 scripts/smzdm_feed.py https://www.smzdm.com/jingxuan/
+# 1. 抓什么值得买「全部好价」（主力源，直连，不用浏览器）
+python3 scripts/smzdm_feed.py --channel all --page 1
+python3 scripts/smzdm_feed.py --channel all --cat 电脑数码      # 按品类
+python3 scripts/smzdm_feed.py --channel jingxuan                # 精选（带值/不值票数）
+python3 scripts/smzdm_feed.py --channels                        # 列出频道与品类 ID
 
 # 2. 查某条爆料是不是已过期
 python3 scripts/smzdm_feed.py --detail https://www.smzdm.com/p/12345678/
@@ -119,6 +124,8 @@ python3 scripts/ledger.py jitter --min 60 --max 540
 # 4. 同款去重（退出码 1 = 同款推过且不更便宜，不推）
 python3 scripts/ledger.py check --title "雅培瞬感3代 动态血糖仪" --product "雅培瞬感3代" --price 499
 ```
+
+被验证码拦时会返回 `{"blocked": true}` 并退出（码 2）——**这是明确的失败，不是"今天没有好价"**。切浏览器取数，仍拿不到就跳过本轮，绝不把空结果当结论。
 
 浏览器部分（搜索页、X、Cloudflare 站点）需要真 Chrome + CDP 直控：
 
@@ -171,7 +178,7 @@ deal-hunter/
 
 ## 覆盖站点
 
-**国内**：什么值得买（列表/搜索/详情）、慢慢买（历史价印证）、赚客吧、0818 团、V2EX 优惠信息、LINUX DO 福利羊毛、京东/淘宝（仅核价核库存）
+**国内**：什么值得买（全部好价 / 精选 / 白菜 / 优惠券 / 海淘 / 商城页 / 站内搜索 / 详情）、慢慢买（历史价印证）、赚客吧、0818 团、V2EX 优惠信息、LINUX DO 福利羊毛、京东/淘宝（仅核价核库存）
 
 **海外**：Slickdeals、DealMoon、CamelCamelCamel（需代理）
 
