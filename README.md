@@ -31,10 +31,10 @@
 
 ```bash
 # macOS / Linux
-git clone <repo> ~/.workbuddy/skills/deal-hunter
+git clone https://github.com/gyf2026/zhao-yang-mao.git ~/.workbuddy/skills/deal-hunter
 
 # Windows
-git clone <repo> "%USERPROFILE%\.workbuddy\skills\deal-hunter"
+git clone https://github.com/gyf2026/zhao-yang-mao.git "%USERPROFILE%\.workbuddy\skills\deal-hunter"
 ```
 
 首次运行初始化数据目录：
