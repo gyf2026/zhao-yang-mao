@@ -29,10 +29,14 @@ NOISE = re.compile(
     r"京东|天猫|淘宝|拼多多|唯品会|自营|官方旗舰店|旗舰店|官方店|百亿补贴|"
     r"补贴|秒杀|预售|现货|限时|直降|折|元起|起售|整点|开抢|领券中心)",
     re.I)
-# 型号区分词：这些词出现在差异部分时，不能算同款（15 和 15 Pro 是两个东西）
-DIFF_TOKEN = re.compile(r"(pro|max|plus|mini|ultra|lite|se|note|air|"
-                        r"标准版|青春版|增强版|升级版|尊享版|豪华版|"
-                        r"[0-9一二三四五六七八九]代)", re.I)
+# 型号 / 配件 / 版本区分词：两边出现的不一样，就不是同一个东西
+# （15 和 15 Pro、手机和手机壳、国行和日版，都是两回事）
+DIFF_WORDS = re.compile(
+    r"(pro|max|plus|mini|ultra|lite|se|note|air|ti|super|xt|"
+    r"标准版|青春版|增强版|升级版|尊享版|豪华版|"
+    r"壳|保护套|贴膜|钢化膜|支架|数据线|充电器|转接头|表带|收纳包|备用|"
+    r"国行|港版|日版|美版|欧版|官换|二手|翻新|"
+    r"[0-9一二三四五六七八九]代)", re.I)
 # 中文数字转阿拉伯：只认"三代 / 两代"这种代数写法。
 # 千万别全局替换——"三诺""三星""九阳"里的数字是品牌名的一部分，换了就毁。
 CN_NUM = {"一": "1", "二": "2", "两": "2", "三": "3", "四": "4",
@@ -93,25 +97,45 @@ def _tokens(s):
     return set(re.findall(r"[a-z]+|\d+", s))
 
 
+# 规格签名：容量/重量/功率/包装数。规格不同就是不同 SKU（128G vs 256G、单套 vs 2 个装）。
+SPEC_RE = re.compile(
+    r"(\d+(?:\.\d+)?)\s*(gb|tb|mb|ml|mah|wh|g|l|w|寸|英寸|个装|支装|盒装|套装|片装|包装|袋装)",
+    re.I)
+
+
+def _spec_sig(s):
+    return {(n, u.lower()) for n, u in SPEC_RE.findall(s)}
+
+
+def _bigrams(s):
+    s = s.replace(" ", "")
+    return {s[i:i + 2] for i in range(len(s) - 1)} or {s}
+
+
 def similar(a, b):
     """两个商品键是否算同款。
 
-    先看型号差异：英文/数字片段不一致且差的是 pro、max、容量、代数 → 判为不同商品。
-    再看整体相似度 ≥0.85，最后处理"全称 vs 简称"（一方被另一方完整包含）。
+    顺序：完全相同 → 型号/配件/版本词不一致就否决 → 规格（容量/包装数）不一致就否决
+         → 中文双字重合率 ≥0.8 → 全称包含简称（差异部分不含型号词）。
+    已知分不清的：同品牌同代的配件细分（传感器 vs 发射器），这种必须靠 Agent 显式传商品键。
     """
     if not a or not b:
         return False
     ca, cb = a.replace(" ", ""), b.replace(" ", "")
     if ca == cb:
         return True
-    diff = _tokens(a) ^ _tokens(b)
-    if diff and any(re.fullmatch(r"\d+", t) or DIFF_TOKEN.search(t) for t in diff):
+    # 一边有 pro/壳/国行、另一边没有 → 两个东西
+    if {w.lower() for w in DIFF_WORDS.findall(a)} != {w.lower() for w in DIFF_WORDS.findall(b)}:
         return False
-    if SequenceMatcher(None, ca, cb).ratio() >= 0.85:
+    # 128G vs 256G、单套 vs 2 个装 → 两个 SKU
+    if _spec_sig(a) != _spec_sig(b):
+        return False
+    ba, bb = _bigrams(a), _bigrams(b)
+    if len(ba & bb) / min(len(ba), len(bb)) >= 0.8:
         return True
     short, long_ = (ca, cb) if len(ca) <= len(cb) else (cb, ca)
     if len(short) >= 5 and short in long_:
-        return not DIFF_TOKEN.search(long_.replace(short, "", 1))
+        return not DIFF_WORDS.search(long_.replace(short, "", 1))
     return False
 
 
