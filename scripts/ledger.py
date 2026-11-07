@@ -276,9 +276,19 @@ def cmd_jitter(a):
 
 
 def cmd_raw(a):
+    """存档路径。默认**稳定**：同一天同一 site+tag 永远给同一个路径。
+
+    旧的实现每次调用都带 %H%M%S，导致「先拿到路径、再保存、再拿路径去读」
+    第二步会拿到另一个不存在的文件名（2026-11-07 实测踩到）。
+    需要保留每轮快照时加 --unique。
+    """
     d = os.path.join(HOME, "raw", datetime.now().strftime("%Y-%m-%d"))
     os.makedirs(d, exist_ok=True)
-    print(os.path.join(d, f"{datetime.now().strftime('%H%M%S')}-{a.site}-{a.tag}.{a.ext}"))
+    if a.unique:
+        name = f"{datetime.now().strftime('%H%M%S')}-{a.site}-{a.tag}.{a.ext}"
+    else:
+        name = f"{a.site}-{a.tag}.{a.ext}"
+    print(os.path.join(d, name))
 
 
 def cmd_skip(a):
@@ -322,7 +332,7 @@ def main():
     c.add_argument("product"); c.add_argument("--product-key", dest="product_key"); c.set_defaults(f=cmd_history)
 
     c = sp.add_parser("jitter"); c.add_argument("--min", type=float, default=60); c.add_argument("--max", type=float, default=540); c.set_defaults(f=cmd_jitter)
-    c = sp.add_parser("raw-path"); c.add_argument("site"); c.add_argument("tag"); c.add_argument("--ext", default="json"); c.set_defaults(f=cmd_raw)
+    c = sp.add_parser("raw-path"); c.add_argument("site"); c.add_argument("tag"); c.add_argument("--ext", default="json"); c.add_argument("--unique", action="store_true", help="文件名带时分秒，保留每轮快照（默认同名覆盖）"); c.set_defaults(f=cmd_raw)
     c = sp.add_parser("skip"); c.add_argument("reason"); c.set_defaults(f=cmd_skip)
 
     a = p.parse_args()
