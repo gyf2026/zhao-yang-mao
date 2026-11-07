@@ -1,6 +1,6 @@
 ---
 name: deal-hunter
-description: 在什么值得买、慢慢买、赚客吧、V2EX 优惠区、X(Twitter) 等网站巡查"羊毛"与低价好价：错价/bug 价、历史新低、大额优惠券、免费试用、AI 免费额度，也可按用户关注清单（如动态血糖仪）盯指定品类的好价。优先用浏览器登录态访问网页，只读不下单。适用于一次性找好价、按关键词比价找最低价，以及定时自动巡检推送。触发词：找羊毛、薅羊毛、好价、低价、什么值得买、smzdm、值得买、历史低价、错价、bug价、优惠券、免费领、免费试用、AI免费额度、帮我盯着、关注清单、巡检好价、扫一轮好价。
+description: 在什么值得买、爱Q生活网、V2EX 优惠区、慢慢买、赚客吧、LINUX DO、X(Twitter) 等网站巡查"羊毛"与低价好价：错价/bug 价、历史新低、大额优惠券、银行立减金、话费红包、免费试用、AI 免费额度，也可按用户关注清单（如动态血糖仪）盯指定品类的好价。优先用浏览器登录态访问网页，只读不下单。首次使用会先自检浏览器控制能力与已装浏览器，再询问关注方向和推送频率来设定扫描计划。适用于一次性找好价、按关键词比价找最低价，以及定时自动巡检推送。触发词：找羊毛、薅羊毛、好价、低价、什么值得买、smzdm、值得买、历史低价、错价、bug价、优惠券、免费领、免费试用、AI免费额度、银行立减金、话费羊毛、红包、帮我盯着、关注清单、巡检好价、扫一轮好价、环境自检。
 agent_created: true
 ---
 
@@ -13,6 +13,36 @@ agent_created: true
 - **时效核验是硬门槛**：没核验过的条目不推。宁可少推，不推死链接。
 - **同款只推一次**：同一商品（换店铺、换链接、换标题都算同一件）推过一次就不再推，**除非这次价格真的更低**。判定交给 `ledger.py check`，不凭印象。
 - **不虚构**：抓不到就写抓不到，禁止凭印象补价格、补"历史低价"。
+
+## 第 0 步：先自检，再开扫（首次必做，换机器必做）
+
+**不要一上来就抓数据。** 这个技能的 A 段靠直连脚本，但 B 段（X / LINUX DO / 券）和大部分时效核验**全靠真浏览器 + 登录态**。这一环断了，技能不会报错，只会安静地少推几条——用户以为在盯，其实半瞎。
+
+```bash
+python3 scripts/doctor.py          # 七项自检，退出码 0=能跑 1=有条件阻塞 2=致命
+python3 scripts/doctor.py --json   # 机器可读
+```
+
+**Agent 还要自己回答一个问题：我到底有没有浏览器控制能力？** 四个判断（细则见 `references/onboarding.md`）：
+
+1. 有没有能开浏览器的工具（browser / playwright / CDP）？没有 → 只能跑直连部分，必须如实告知。
+2. 开出来是真的窗口、用户看得见吗？只拿到 HTML 字符串 → **不算**。
+3. 有固定 profile、关掉再开还是登录态吗？每次都是干净临时目录 → **等于没有**。
+4. 能拿到 cookie 并落盘复用吗？拿不到 → **对 X / LINUX DO 等于零**。
+
+> WorkBuddy 内置的浏览器控制在连接失败时会静默回退到自带 Chromium（报成功但窗口收不到指令），**必须用外置浏览器 + `browser-cdp-control`**。Hermes / OpenClaw / ChatGPT 这类有内置浏览器，但 profile 多是临时的、登录态存不住，**仍然建议改用外置**——理由就是要存 cookie。
+
+缺浏览器时按这张表装（**只有 Chromium 内核支持 CDP**）：
+
+| 浏览器 | macOS | Windows | Linux | 说明 |
+|---|---|---|---|---|
+| Google Chrome | ✓ | ✓ | ✓ | **首选**，CDP 支持最完整 |
+| Microsoft Edge | ✓ | ✓ 自带 | ✓ | Windows 免装，效果等同 Chrome |
+| QQ 浏览器 | ✓ | ✓ | — | 国产 Chromium，国内站顺手 |
+| Safari | ✓ | — | — | **不能用**，走 WebDriver |
+| Firefox | ✓ | ✓ | ✓ | **不推荐**，CDP 协议不兼容 |
+
+**自检通了、浏览器装好了，再去问用户要什么**（方向 / 频率 / 范围），完整剧本见 `references/onboarding.md`。顺序不能反：先确认能跑，再问需求，最后排班。
 
 ## 动手前先问清方向（第一次用 / 需求模糊时）
 
@@ -102,6 +132,7 @@ python3 scripts/ledger.py history "雅培瞬感3代"    # 单品价格变化史
 | smzdm 站内搜索 `search.smzdm.com` | **必须浏览器** | 直连只返回 202 + JS 挑战页（实测） |
 | 带 Cloudflare/403 的站点、X、登录后内容 | **`browser-cdp-control` 技能** | 详见下节，**不要用内置浏览器控制** |
 | **V2EX 优惠信息**（领取类羊毛主力） | `smzdm` 之外的直连源：`v2ex_feed.py`（官方 API） | 话费/会员/红包/AI 额度，直连 200，不用浏览器。**一天扫一次** |
+| **爱Q生活网**（银行立减金/话费/红包） | 直连：`iqnew_feed.py` | 一页 25 条、当天十几条，比 V2EX 勤。**GBK 编码**，脚本已处理 |
 | LINUX DO 福利（AI 额度主战场） | **只能浏览器**，JSON 接口 403（实测直连和代理都被 Cloudflare 拦） | 见 `references/sites.md` |
 | 站点逐一可达性与坑 | 见 `references/sites.md` | 含实测结论与频道地图 |
 
@@ -164,7 +195,10 @@ CDP_PORT=9315 node cdp.js front <id>            # 需要用户登录时切前台
    - 交叉比价（可选）：对候选商品到慢慢买查历史价，印证"历史低价"。
    - **被拦怎么办**：脚本会返回 `{"blocked": true}` 并以退出码 2 结束。这是**明确的失败，不是"本轮没有好价"**。此时切浏览器（`browser-cdp-control`）打开同一页面取数；仍拿不到就记 `skipped.log` 跳过本轮，**绝不把空结果当结论推给用户**。
 3. **B 段：羊毛与 AI 额度**（用户要求或定时模式开启时）：
-   - **先跑直连源**：`python3 scripts/v2ex_feed.py --save $(python3 scripts/ledger.py raw-path v2ex deals)`。一次 10 条、覆盖约 27 天，**一天扫一次就够，不必进 2 小时循环**。对命中门槛的条目再 `--detail <id>` 看回复里的"已失效/领完了"，`likely_dead=true` 的不推。
+   - **先跑两个直连源，不用开浏览器**：
+     - `python3 scripts/iqnew_feed.py --save $(python3 scripts/ledger.py raw-path iqnew activity)` —— 爱Q生活网，一页 25 条，当天十几条更新，银行立减金/话费/红包。
+     - `python3 scripts/v2ex_feed.py --save $(python3 scripts/ledger.py raw-path v2ex deals)` —— V2EX 优惠信息，一次 10 条但覆盖约 27 天，**一天扫一次就够，不必进 2 小时循环**。
+   - 对命中门槛的条目再 `v2ex_feed.py --detail <id>` 看回复里的"已失效/领完了"，`likely_dead=true` 的不推。
    - **再走浏览器**：LINUX DO 福利板块（AI 额度质量最高，必须真浏览器过 Cloudflare）、已登录的 X 首页/关注流 1–2 屏、赚客吧、0818团、smzdm 优惠券频道。见 `references/sites.md`。
    - **只收"领取类"与"AI 免费额度"**（有链接、有兑换码、有限时说明），纯资讯讨论、纯提问帖一律不收。
    - 条目多于 3 条时，先按"能不能立刻领 / 有无额度上限 / 是否限新用户"排序，别平铺一堆。
@@ -287,7 +321,7 @@ python3 scripts/ledger.py history "<商品名>"     # 单品价格变化史
 
 | 部分 | macOS / Linux | Windows |
 |---|---|---|
-| `ledger.py`、`smzdm_feed.py` | ✓ | ✓ 直接用（命令是 `python` 不是 `python3`） |
+| `ledger.py`、`smzdm_feed.py`、`v2ex_feed.py`、`iqnew_feed.py`、`doctor.py` | ✓ | ✓ 直接用（命令是 `python` 不是 `python3`） |
 | `smzdm_feed.py`（抓取） | ✓ | ✓ urllib 已显式清代理，系统代理不影响 |
 | 浏览器启动 | `browser_cdp.sh`（zsh，需 `--detach` 防回收） | `browser_cdp.ps1`（PowerShell，`Start-Process` 天然脱离） |
 | 必踩差异 | 代理变量污染、进程组回收 | Chrome 单实例吞参数、`curl` 是别名、`.bat` 中文乱码 |
@@ -296,13 +330,17 @@ python3 scripts/ledger.py history "<商品名>"     # 单品价格变化史
 
 ## 参考文件
 
+- `references/onboarding.md`：**首次使用剧本**（Agent 自检浏览器能力 → 装浏览器 → 问方向 → 定计划）。第一次跑、换机器，先照它走一遍。
 - `references/sites.md`：**每个站点的入口、建议操作、抓什么、坑在哪**。动手前先看对应站点那一节。
 - `references/troubleshooting.md`：**浏览器控制的踩坑手册**（白屏、窗口消失、验证码、代理连不上、Cloudflare、登录墙、关不掉）。出问题先查它。
 - `references/windows.md`：Windows 上的路径、Chrome 启动、端口、编码、权限差异与解法。
 - `references/reporting.md`：**汇报规范**（先问后查、三要素溯源、确定性分档、报告结构、自检清单）。
 - `references/automation-prompt.md`：定时任务提示词模板与排班建议。
+- `scripts/doctor.py`：**环境自检**（浏览器、CDP 通道、代理、网络、台账、登录态），首次必跑。
 - `scripts/browser_cdp.ps1`：Windows 版浏览器启动/探活/关闭。
 - `scripts/ledger.py`：商品级去重、扫描台账、回查。
 - `scripts/pick.py`：**选品器**——门槛校验、新鲜度、同款合并、打分排序、限额，输出选中与剔除原因。
 - `scripts/smzdm_feed.py`：smzdm 列表解析与详情核验（含发布时间、省额）。
+- `scripts/v2ex_feed.py`：V2EX 优惠信息（直连 API，含回复失效判定）。
+- `scripts/iqnew_feed.py`：爱Q生活网活动线报（直连，银行立减金/话费/红包）。
 

@@ -1,6 +1,6 @@
 # 找羊毛
 
-> 一个给 WorkBuddy / Claude Code 用的技能（Skill）：在什么值得买、慢慢买、赚客吧、V2EX、LINUX DO、X（Twitter）等站点巡查**好价与羊毛**——错价、历史新低、大额券、免费试用、AI 免费额度，也可以只盯你关心的那个品类。
+> 一个给 WorkBuddy / Claude Code 用的技能（Skill）：在什么值得买、慢慢买、爱Q生活网、V2EX、赚客吧、LINUX DO、X（Twitter）等站点巡查**好价与羊毛**——错价、历史新低、大额券、银行立减金、免费试用、AI 免费额度，也可以只盯你关心的那个品类。
 
 **全程只读**：只报告，不下单、不领券、不加购、不发帖。登录由你自己在浏览器里完成 —— **技能不保存你的账号密码**，只在登录成功后存一份 cookie 用于下次免登。
 
@@ -52,6 +52,8 @@
 
 **排班建议**：每 2 小时一轮、只跑 08:00–23:00。好价通常几小时就被抢完，过密只增加风控风险；夜间没有新爆料。大促日可临时调到 1 小时。
 
+但**不同源更新速度差很多，别用一个频率套所有站**：什么值得买是分钟级、几小时抢光，2 小时合理；LINUX DO 是小时级，一天 2–3 次够；V2EX 优惠信息是**天级**（实测最新一条在 49 小时前），一天扫一次就行，拿 2 小时去轮纯属浪费，还白耗 API 限流额度。
+
 连续 3 轮以上被跳过，说明是系统性问题（登录过期 / 代理挂了 / 浏览器被占），技能会主动提醒你，不会一直装死。
 
 
@@ -76,6 +78,55 @@ python3 scripts/ledger.py init      # Windows 用 python
 ```
 
 会在 `~/.workbuddy/deal-hunter/` 下建 `watchlist.md`、`pushed.jsonl`、`pushed-wool.jsonl`、`scan.jsonl`、`raw/`。
+
+---
+
+## 第一步：环境自检（**别跳过**）
+
+```bash
+python3 scripts/doctor.py          # 七项检查，退出码 0=能跑 / 1=有条件阻塞 / 2=致命
+python3 scripts/doctor.py --json   # 机器可读
+```
+
+查七项：系统与 Python、外置浏览器、CDP 控制通道、代理、网络、台账、登录态。
+
+**为什么必须查**：A 段靠直连脚本，但 B 段（X / LINUX DO / 券）和大部分时效核验**全靠真浏览器 + 登录态**。这一环断了，技能不会报错，只会安静地少推几条——你以为在盯，其实半瞎。
+
+### 你的 Agent 有浏览器能力吗？四个判断
+
+脚本查不出这个，得 Agent 自己回答：
+
+1. 有没有能开浏览器的工具（browser / playwright / CDP）？
+2. 开出来是真的窗口、你能看见并自己操作吗？只拿到 HTML 字符串**不算**。
+3. 有固定 profile、关掉再开还是登录态吗？每次都是干净临时目录**等于没有**。
+4. 能拿到 cookie 并复用吗？拿不到**对 X / LINUX DO 等于零**。
+
+| 你的环境 | 浏览器现状 | 建议 |
+|---|---|---|
+| WorkBuddy | 内置浏览器控制连接失败时会**静默回退到自带 Chromium**：窗口收不到指令却回「✓ Done」，数据错位；而且活不过一次命令调用 | **用外置浏览器 + CDP**，别用内置那套 |
+| Hermes / OpenClaw / ChatGPT（含 Computer Use） | 一般有内置浏览器，能点能读 | **仍建议改用外置**：内置 profile 多是临时的，登录态存不住，而登录是 X、LINUX DO 的命门 |
+| 纯 CLI Agent | 没有 | 只能跑直连部分，**如实告知用户**，别假装扫了 |
+
+### 装哪个浏览器
+
+**只有 Chromium 内核支持 CDP 调试协议**，这不是偏好问题：
+
+| 浏览器 | macOS | Windows | Linux | 评价 |
+|---|---|---|---|---|
+| **Google Chrome** | ✓ | ✓ | ✓ | **首选**，CDP 最完整 |
+| **Microsoft Edge** | ✓ | ✓ 系统自带 | ✓ | Windows 免装，等同 Chrome |
+| **QQ 浏览器** | ✓ | ✓ | — | 国产 Chromium，国内站顺手 |
+| Brave / Chromium | ✓ | ✓ | ✓ | 备选 |
+| Safari | ✓ | — | — | **不能用**，走 WebDriver |
+| Firefox | ✓ | ✓ | ✓ | **不推荐**，CDP 不兼容 |
+
+装好后**登录就在这个浏览器里做**，cookie 才存得住；换浏览器等于重新登。
+
+### 自检过了，再问用户要什么
+
+方向（比价 / 品类 / 日用品 / 纯羊毛 / AI 额度）、频率、范围——用选项问，别开放式提问。完整剧本见 `references/onboarding.md`。
+
+**顺序不能反**：先确认能跑，再问需求，最后排班。反过来会出现"计划建好了、每天准点空跑"。
 
 ---
 
@@ -118,10 +169,15 @@ python3 scripts/smzdm_feed.py --channels                        # 列出频道�
 # 2. 查某条爆料是不是已过期
 python3 scripts/smzdm_feed.py --detail https://www.smzdm.com/p/12345678/
 
-# 3. 随机延迟（定时巡检用，反风控）
+# 3. 领取类羊毛（两个直连源，都不用浏览器）
+python3 scripts/v2ex_feed.py                    # V2EX 优惠信息（话费/会员/AI 额度）
+python3 scripts/v2ex_feed.py --detail 1254773   # 拉回复判"已失效"
+python3 scripts/iqnew_feed.py                   # 爱Q生活网（银行立减金/话费/红包）
+
+# 4. 随机延迟（定时巡检用，反风控）
 python3 scripts/ledger.py jitter --min 60 --max 540
 
-# 4. 同款去重（退出码 1 = 同款推过且不更便宜，不推）
+# 5. 同款去重（退出码 1 = 同款推过且不更便宜，不推）
 python3 scripts/ledger.py check --title "雅培瞬感3代 动态血糖仪" --product "雅培瞬感3代" --price 499
 ```
 
@@ -160,15 +216,19 @@ CDP_PORT=9315 node ~/.workbuddy/skills/browser-cdp-control/scripts/cdp.js list
 deal-hunter/
 ├── SKILL.md                     主流程、门槛、格式
 ├── references/
+│   ├── onboarding.md            首次使用：自检 → 装浏览器 → 问方向 → 定计划
 │   ├── sites.md                 每个站：入口/建议操作/抓什么/坑
 │   ├── troubleshooting.md       浏览器踩坑手册 + 排查决策树
 │   ├── windows.md               Windows 差异与解法
 │   ├── reporting.md             汇报规范（先问后查、三要素、确定性分档）
 │   └── automation-prompt.md     定时任务提示词模板
 ├── scripts/
+│   ├── doctor.py                环境自检（浏览器/CDP/代理/网络/台账/登录态）
 │   ├── ledger.py                商品级去重 / 扫描台账 / 回查 / 随机延迟（跨平台）
 │   ├── pick.py                  选品器：门槛、新鲜度、同款合并、打分排序、限额
 │   ├── smzdm_feed.py            smzdm 列表与详情直连解析（跨平台）
+│   ├── v2ex_feed.py             V2EX 优惠信息（直连 API + 回复失效判定）
+│   ├── iqnew_feed.py            爱Q生活网线报（直连，GBK 编码已处理）
 │   └── browser_cdp.ps1          Windows 浏览器启动/探活/关闭
 └── assets/
     └── watchlist.example.md     关注清单模板
@@ -178,7 +238,7 @@ deal-hunter/
 
 ## 覆盖站点
 
-**国内**：什么值得买（全部好价 / 精选 / 白菜 / 优惠券 / 海淘 / 商城页 / 站内搜索 / 详情）、慢慢买（历史价印证）、赚客吧、0818 团、V2EX 优惠信息、LINUX DO 福利羊毛、京东/淘宝（仅核价核库存）
+**国内**：什么值得买（全部好价 / 精选 / 白菜 / 优惠券 / 海淘 / 商城页 / 站内搜索 / 详情）、慢慢买（历史价印证）、**爱Q生活网（银行立减金 / 话费 / 红包，直连）**、V2EX 优惠信息、赚客吧、0818 团、LINUX DO 福利羊毛、京东/淘宝（仅核价核库存）
 
 **海外**：Slickdeals、DealMoon、CamelCamelCamel（需代理）
 

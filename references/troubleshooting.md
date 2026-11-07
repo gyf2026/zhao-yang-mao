@@ -55,6 +55,19 @@ cd ~/.workbuddy/skills/browser-cdp-control/scripts
   # 期望：当前 IP：114.94.x.x  来自于：中国 上海 上海  电信
   ```
 
+**另一个更隐蔽的原因：UA 写太简（2026-11-07 实测）**
+
+同样是 `https://faxian.smzdm.com/`，同样直连不走代理，只改 UA：
+
+| UA | 结果 |
+|---|---|
+| `Mozilla/5.0` | HTTP 200，**1697 字节，TCaptcha 验证码页** |
+| 完整 Chrome UA（含 `(Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ...`） | HTTP 200，**250KB 正常页** |
+
+所以遇到"没抓几次却被拦"，先看 UA 是不是简写的。urllib 默认 UA 是 `Python-urllib/3.x`，比简写的更容易被拦。**脚本里一律用完整 Chrome UA**，别为了省事写 `Mozilla/5.0`。
+
+判别办法同样是看**响应字节数**：正常页 200KB+，被拦的只有 1–2KB。
+
 ---
 
 ## 3. ERR_PROXY_CONNECTION_FAILED
