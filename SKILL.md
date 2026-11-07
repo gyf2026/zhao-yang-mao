@@ -9,19 +9,32 @@ agent_created: true
 ## 红线（任何模式都适用）
 
 - **全程只读**：禁止下单、领券、加购、发帖、点赞、关注、私信、提交表单、输入个人信息或凭据。发现好价只报告，由用户自己去领。
-- **登录由用户完成，且不碰账密**：需要登录态时，让用户在浏览器窗口里自己登录（扫码 / 验证码）。**Agent 不保存、不读取、不输入账号密码**，只在登录成功后导出一次 cookie 用于下次免登（`node cdp.js dumpcookie`）；cookie 只是让浏览器免于再次登录，等同于本机浏览器原本就有的登录态。
+- **登录由用户完成，且不碰账密**：需要登录态时，让用户在浏览器窗口里自己登录（扫码 / 验证码）。**Agent 不保存、不读取、不输入账号密码**，只在登录成功后导出一次 cookie 用于下次免登（`python3 scripts/browser.py cookies --save …`）；cookie 只是让浏览器免于再次登录，等同于本机浏览器原本就有的登录态。
 - **时效核验是硬门槛**：没核验过的条目不推。宁可少推，不推死链接。
 - **同款只推一次**：同一商品（换店铺、换链接、换标题都算同一件）推过一次就不再推，**除非这次价格真的更低**。判定交给 `ledger.py check`，不凭印象。
 - **不虚构**：抓不到就写抓不到，禁止凭印象补价格、补"历史低价"。
 
-## 第 0 步：先自检，再开扫（首次必做，换机器必做）
+## 第 0 步：先自检，缺什么自己补（首次必做，换机器必做）
 
 **不要一上来就抓数据。** 这个技能的 A 段靠直连脚本，但 B 段（X / LINUX DO / 券）和大部分时效核验**全靠真浏览器 + 登录态**。这一环断了，技能不会报错，只会安静地少推几条——用户以为在盯，其实半瞎。
 
 ```bash
-python3 scripts/doctor.py          # 七项自检，退出码 0=能跑 1=有条件阻塞 2=致命
-python3 scripts/doctor.py --json   # 机器可读
+python3 scripts/doctor.py --plan   # 先看缺什么（JSON，按阻塞优先级排好）
+python3 scripts/doctor.py --fix    # 自动补安全项（建目录、初始化台账），不装软件
+python3 scripts/doctor.py          # 补完复检，退出码 0=能跑 1=有缺失 2=致命
 ```
+
+**依赖只有两样：Python ≥3.8 + 一个 Chromium 内核浏览器。** 不需要 node、不需要第三方 Python 包、不需要额外装技能——CDP 控制器 `scripts/browser.py` 是自带的，WebSocket 都自己实现了。
+
+补全流程（**Agent 自己干，别甩给用户**）：
+
+| `--plan` 里的 kind | Agent 该做什么 |
+|---|---|
+| `auto` | 直接执行 `cmd`，不用问 |
+| `install` | 先问用户一句，同意后执行安装命令，装完**必须复检** |
+| `manual` | 做不了或不该自动做（代理、登录、换 Python），转告具体步骤 |
+
+完整依赖清单、各平台安装命令见 `references/dependencies.md`。
 
 **Agent 还要自己回答一个问题：我到底有没有浏览器控制能力？** 四个判断（细则见 `references/onboarding.md`）：
 
@@ -30,7 +43,7 @@ python3 scripts/doctor.py --json   # 机器可读
 3. 有固定 profile、关掉再开还是登录态吗？每次都是干净临时目录 → **等于没有**。
 4. 能拿到 cookie 并落盘复用吗？拿不到 → **对 X / LINUX DO 等于零**。
 
-> WorkBuddy 内置的浏览器控制在连接失败时会静默回退到自带 Chromium（报成功但窗口收不到指令），**必须用外置浏览器 + `browser-cdp-control`**。Hermes / OpenClaw / ChatGPT 这类有内置浏览器，但 profile 多是临时的、登录态存不住，**仍然建议改用外置**——理由就是要存 cookie。
+> WorkBuddy 内置的浏览器控制在连接失败时会静默回退到自带 Chromium（报成功但窗口收不到指令），**必须用外置浏览器 + 自带的 `scripts/browser.py`**。Hermes / OpenClaw / ChatGPT 这类有内置浏览器，但 profile 多是临时的、登录态存不住，**仍然建议改用外置**——理由就是要存 cookie。
 
 缺浏览器时按这张表装（**只有 Chromium 内核支持 CDP**）：
 
@@ -41,6 +54,14 @@ python3 scripts/doctor.py --json   # 机器可读
 | QQ 浏览器 | ✓ | ✓ | — | 国产 Chromium，国内站顺手 |
 | Safari | ✓ | — | — | **不能用**，走 WebDriver |
 | Firefox | ✓ | ✓ | ✓ | **不推荐**，CDP 协议不兼容 |
+
+装完别只信自检，跑一次端到端确认（启动 → CDP → 执行 JS → 关闭）：
+
+```bash
+python3 scripts/browser.py start "https://faxian.smzdm.com/" --session selftest
+python3 scripts/browser.py eval  "document.title" --session selftest
+python3 scripts/browser.py stop  --session selftest
+```
 
 **自检通了、浏览器装好了，再去问用户要什么**（方向 / 频率 / 范围），完整剧本见 `references/onboarding.md`。顺序不能反：先确认能跑，再问需求，最后排班。
 
@@ -130,7 +151,7 @@ python3 scripts/ledger.py history "雅培瞬感3代"    # 单品价格变化史
 | 详情页 `www.smzdm.com/p/<id>/` | 直连优先，**被拦必须转浏览器** | 时效核验只能靠它 |
 | 优惠券 `duihuan.smzdm.com/quan/` | 浏览器（多数券要登录） | B 类羊毛来源 |
 | smzdm 站内搜索 `search.smzdm.com` | **必须浏览器** | 直连只返回 202 + JS 挑战页（实测） |
-| 带 Cloudflare/403 的站点、X、登录后内容 | **`browser-cdp-control` 技能** | 详见下节，**不要用内置浏览器控制** |
+| 带 Cloudflare/403 的站点、X、登录后内容 | **自带 `scripts/browser.py`**（零依赖 CDP 控制器） | 详见下节，**不要用内置浏览器控制** |
 | **V2EX 优惠信息**（领取类羊毛主力） | `smzdm` 之外的直连源：`v2ex_feed.py`（官方 API） | 话费/会员/红包/AI 额度，直连 200，不用浏览器。**一天扫一次** |
 | **爱Q生活网**（银行立减金/话费/红包） | 直连：`iqnew_feed.py` | 一页 25 条、当天十几条，比 V2EX 勤。**GBK 编码**，脚本已处理 |
 | LINUX DO 福利（AI 额度主战场） | **只能浏览器**，JSON 接口 403（实测直连和代理都被 Cloudflare 拦） | 见 `references/sites.md` |
@@ -153,33 +174,37 @@ python3 scripts/ledger.py history "雅培瞬感3代"    # 单品价格变化史
 
 品类 ID 目录：`python3 scripts/smzdm_feed.py --channels`（电脑数码 163、食品生鲜 95、日用百货 1515、家用电器 27…）。
 
-### 浏览器一律走 `browser-cdp-control` 技能（2026-11-01 实测）
+### 浏览器一律走自带的 `scripts/browser.py`（零依赖 CDP 控制器）
 
-内置浏览器控制（agent-browser / browser-use）在连接失败时**静默回退到自带的 Chromium**：屏幕上那个 Chrome 收不到指令，却回「✓ Done」，读到的是另一个浏览器的页面。而且它起的 Chrome **活不过一次命令调用**，登录态存不住。所以固定用：
+内置浏览器控制（agent-browser / browser-use）在连接失败时**静默回退到自带的 Chromium**：屏幕上那个 Chrome 收不到指令，却回「✓ Done」，读到的是另一个浏览器的页面。而且它起的 Chrome **活不过一次命令调用**，登录态存不住。
+
+本仓库自带一个纯 Python 的 CDP 控制器（自己实现了 WebSocket，不依赖 node、不依赖第三方包、不依赖别的技能），固定用它：
 
 ```bash
-cd ~/.workbuddy/skills/browser-cdp-control/scripts
-export NODE_PATH=/Users/fgy/.workbuddy/binaries/node/workspace/node_modules
+# 国内站（默认直连，脚本已加 --no-proxy-server）
+python3 scripts/browser.py start "https://faxian.smzdm.com/" --session deal-hunter
 
-# 国内站（直连，脚本自带 env -u 摘代理）
-./browser_cdp.sh start "<URL>" --session deal-hunter --detach
-# 境外站（X/Slickdeals 等，需显式给代理 + 国内域名绕过）
-./browser_cdp.sh start "<URL>" --session deal-hunter-x --detach \
-  --proxy "http://127.0.0.1:54835" \
-  --proxy-bypass "*.smzdm.com;*.manmanbuy.com;*.zuanke8.com;*.0818tuan.com;*.v2ex.com;*.linux.do;localhost"
+# 境外站（X / Slickdeals）：显式给代理 + 国内域名绕过
+python3 scripts/browser.py start "https://x.com/" --session deal-hunter-x \
+  --proxy "http://127.0.0.1:7890" \
+  --proxy-bypass "*.smzdm.com;*.manmanbuy.com;*.v2ex.com;*.linux.do;localhost"
 
-CDP_PORT=9315 node cdp.js list                  # 取 targetId
-CDP_PORT=9315 node cdp.js newtab "<URL>"        # 开新标签（不抢已有页）
-CDP_PORT=9315 node cdp.js eval <id> "表达式"     # 抓结构化数据
-CDP_PORT=9315 node cdp.js front <id>            # 需要用户登录时切前台
+python3 scripts/browser.py list  --session deal-hunter          # 取 targetId
+python3 scripts/browser.py open  "<URL>" --session deal-hunter   # 开新标签（不抢已有页）
+python3 scripts/browser.py eval  "表达式" --session deal-hunter   # 抓结构化数据
+python3 scripts/browser.py eval  "({t:document.title,n:document.querySelectorAll('.feed-block').length})"
+python3 scripts/browser.py cookies --session deal-hunter --save ~/.workbuddy/deal-hunter/cookies/x.json
+python3 scripts/browser.py front <targetId> --session deal-hunter   # 需要用户登录时切前台
+python3 scripts/browser.py stop  --session deal-hunter
 ```
 
-- 端口由 `--session` 名字 hash 到 93xx，国内/境外各用一个 session，互不干扰。
+- `eval` 里**直接写对象字面量**（`({a:1})`）就能拿到 JSON，不要套 `JSON.stringify`，否则会多一层转义。
+- 端口与 profile 由 `--session` 名字经 CRC32 映射到 93xx，同名必得同一端口、同一 profile，国内/境外各用一个 session 互不干扰。
+- profile 落在 `~/.workbuddy/browser-profiles/<session>`，**关掉再开还是登录态**。
 - **代理端口会变**：每次以 `env | grep -i proxy` 的实际值为准，别用记下来的旧端口（写错会得到 `ERR_PROXY_CONNECTION_FAILED`）。
-- 登录成功后立刻 `node cdp.js dumpcookie <id> /tmp/xxx.json`，session cookie 关窗就没了。
-- `--proxy` / `--proxy-bypass` 是本技能新增的可选参数，不传则行为与原来完全一致。
-- **Windows 用 `scripts/browser_cdp.ps1`**（参数同名）；Chrome 已有实例会吞掉调试参数，必须用独立 `user-data-dir`，详见 `references/windows.md`。
-- 浏览器出任何问题（白屏 / 窗口消失 / 验证码 / 代理连不上 / Cloudflare / 登录墙），先查 `references/troubleshooting.md` 的决策树。
+- 登录成功后立刻 `cookies --save`，session cookie 关窗就没了。cookie 文件含登录凭据，**只存本机，不要提交到仓库**。
+- 浏览器出任何问题（白屏 / 窗口消失 / 验证码 / 代理连不上 / Cloudflare / 登录墙），先查 `references/troubleshooting.md` 的决策树；装不上浏览器查 `references/dependencies.md`。
+- 旧环境里如果还装着 `browser-cdp-control` 技能，也能用（`browser_cdp.sh` / `browser_cdp.ps1`），但**不再是必需项**，优先用自带的 `browser.py`。
 
 **国内站先排除代理污染**：本机常有 `HTTP_PROXY` 变量，会让国内站流量走海外节点而被风控。命令行抓国内站一律加 `--noproxy '*'`（脚本已内置）。详见 `cn-platform-collection` 技能第零条铁律。
 
@@ -193,7 +218,7 @@ CDP_PORT=9315 node cdp.js front <id>            # 需要用户登录时切前台
    - **补漏**：`--channel jingxuan` 拿值/不值票数做质量旁证；关注清单里的品类再定向扫品类页（`--cat 电脑数码` 之类）。
    - 关注清单：对每个品类的主词必搜，辅词每轮轮换 2–3 个，用浏览器开 `https://search.smzdm.com/?c=home&s=<关键词>&order=time`，每词最多 1 页，页面快照存 `raw/`。
    - 交叉比价（可选）：对候选商品到慢慢买查历史价，印证"历史低价"。
-   - **被拦怎么办**：脚本会返回 `{"blocked": true}` 并以退出码 2 结束。这是**明确的失败，不是"本轮没有好价"**。此时切浏览器（`browser-cdp-control`）打开同一页面取数；仍拿不到就记 `skipped.log` 跳过本轮，**绝不把空结果当结论推给用户**。
+   - **被拦怎么办**：脚本会返回 `{"blocked": true}` 并以退出码 2 结束。这是**明确的失败，不是"本轮没有好价"**。此时用 `scripts/browser.py` 打开同一页面取数；仍拿不到就记 `skipped.log` 跳过本轮，**绝不把空结果当结论推给用户**。
 3. **B 段：羊毛与 AI 额度**（用户要求或定时模式开启时）：
    - **先跑两个直连源，不用开浏览器**：
      - `python3 scripts/iqnew_feed.py --save $(python3 scripts/ledger.py raw-path iqnew activity)` —— 爱Q生活网，一页 25 条，当天十几条更新，银行立减金/话费/红包。
@@ -201,9 +226,17 @@ CDP_PORT=9315 node cdp.js front <id>            # 需要用户登录时切前台
    - 对命中门槛的条目再 `v2ex_feed.py --detail <id>` 看回复里的"已失效/领完了"，`likely_dead=true` 的不推。
    - **再走浏览器**：LINUX DO 福利板块（AI 额度质量最高，必须真浏览器过 Cloudflare）、已登录的 X 首页/关注流 1–2 屏、赚客吧、0818团、smzdm 优惠券频道。见 `references/sites.md`。
    - **只收"领取类"与"AI 免费额度"**（有链接、有兑换码、有限时说明），纯资讯讨论、纯提问帖一律不收。
-   - 条目多于 3 条时，先按"能不能立刻领 / 有无额度上限 / 是否限新用户"排序，别平铺一堆。
+   - **排序同样走 `assemble.py` + `pick.py`**，不要手工挑：`assemble.py` 会把这两个源标成 `类型: 羊毛`，pick 用羊毛专用的门槛（关注命中 / 有明确金额 ≥5 元 / AI 额度 / 免费领取，纯抽奖和不带价值的直接剔）和 72 小时新鲜度。
+   - 条目多于 3 条时，按"能不能立刻领 / 有无额度上限 / 是否限新用户"排，别平铺一堆。
 4. **按时效与门槛初筛**：`smzdm_feed.py --detail` 逐条看 `expired` 和 `age_hours`，过期或超过 12 小时的先丢；再按门槛 a/b/c/d 判（见下）。**详情页被拦（返回 blocked）时不得当成已核验**，改用浏览器打开该详情页读正文。
-5. **同款去重 + 排序限额**：先 `ledger.py check` 排掉"同款推过且不更便宜"的，再把剩下的候选整理成 JSON 交给 `pick.py`——它做同款合并、打分排序、限 3 条、单品类限 2 条，并给出每条被剔除的原因。
+5. **同款去重 + 排序限额**：先 `ledger.py check` 排掉"同款推过且不更便宜"的，再把候选交给 `pick.py`——它做同款合并、打分排序、限 3 条、单品类限 2 条，并给出每条被剔除的原因。
+   - **A 段和 B 段都要过这一步，别手工拼 JSON。** 用 `assemble.py` 把 feed 的输出转成 pick 的输入：
+     ```bash
+     python3 scripts/assemble.py raw/v2ex-deals.json raw/iqnew-activity.json --watch "血糖仪,话费" \
+       | python3 scripts/pick.py --max 3 --max-per-cate 2
+     ```
+   - `assemble.py` 会自动识别来源、打上 `类型`（好价 / 羊毛）、从标题抽 `额度`（红包/立减金这些没有原价）。**标题空值率超过 30% 它会报错退出**，不会吐一个空列表冒充"没货"。
+   - 好价和羊毛用两套门槛与新鲜度：好价 12 小时、羊毛 72 小时（`--max-age-wool`）。**羊毛套 12 小时会把当天以外的全砍光**，2026-11-07 实测踩过。
 6. **时效核验（逐条，硬门槛）**：`expired=true` 的直接丢；再用浏览器打开商城原链接看库存与实际价。X 帖需看评论区高赞是否说"失效/已修复/结束"。**只推核验过的**。
 7. **记账（一定要做，推没推都记）**：
    - 推送的：`ledger.py add --kind … --type … --title … --product … --price … --url … --site …`。
@@ -244,7 +277,7 @@ CDP_PORT=9315 node cdp.js front <id>            # 需要用户登录时切前台
 | 闸 | 判什么 | 怎么执行 |
 |---|---|---|
 | ① 门槛 | a/b/c/d 四条，见上 | Agent 判定，逐条写依据 |
-| ② 新鲜度 | **发布超过 12 小时不推** | `smzdm_feed.py --detail` 取 `created` / `age_hours`（列表页没有时间，详情页 meta 才有） |
+| ② 新鲜度 | **好价超过 12 小时不推；羊毛放宽到 72 小时** | `smzdm_feed.py --detail` 取 `created` / `age_hours`（列表页没有时间，详情页 meta 才有）。羊毛不是秒杀，会员/话费活动能挂几天，用 12 小时会全砍 |
 | ③ 同款 | 同款只留评分最高的一条 | `ledger.py check` + `pick.py` 自动合并 |
 | ④ 排序 | 谁更值得推 | `pick.py` 打分 |
 | ⑤ 限额 | 一轮最多 3 条、单品类最多 2 条 | `pick.py --max 3 --max-per-cate 2` |
@@ -323,7 +356,8 @@ python3 scripts/ledger.py history "<商品名>"     # 单品价格变化史
 |---|---|---|
 | `ledger.py`、`smzdm_feed.py`、`v2ex_feed.py`、`iqnew_feed.py`、`doctor.py` | ✓ | ✓ 直接用（命令是 `python` 不是 `python3`） |
 | `smzdm_feed.py`（抓取） | ✓ | ✓ urllib 已显式清代理，系统代理不影响 |
-| 浏览器启动 | `browser_cdp.sh`（zsh，需 `--detach` 防回收） | `browser_cdp.ps1`（PowerShell，`Start-Process` 天然脱离） |
+| 浏览器启动 | `scripts/browser.py`（三平台同一份，纯 Python）；进程用 `start_new_session` 脱离 shell | 同左，改用 `DETACHED_PROCESS` 脱离父进程 |
+| 数据目录 | `~/.workbuddy/deal-hunter`（可用 `DEAL_HUNTER_HOME` 覆盖） | 同为 `%USERPROFILE%\.workbuddy\deal-hunter`，同样支持环境变量 |
 | 必踩差异 | 代理变量污染、进程组回收 | Chrome 单实例吞参数、`curl` 是别名、`.bat` 中文乱码 |
 
 **Windows 上十条必看**（完整版 `references/windows.md`）：`python3`→`python`、`curl`→`curl.exe`、bypass 用分号、Chrome 必须独立 `user-data-dir`、杀进程按 PID 不按镜像名、`.ps1` 存 UTF-8 BOM、本地请求加 `-NoProxy`、Node 需 ≥22、中文路径全部加引号、代理端口自己查别照抄。
@@ -331,16 +365,19 @@ python3 scripts/ledger.py history "<商品名>"     # 单品价格变化史
 ## 参考文件
 
 - `references/onboarding.md`：**首次使用剧本**（Agent 自检浏览器能力 → 装浏览器 → 问方向 → 定计划）。第一次跑、换机器，先照它走一遍。
+- `references/dependencies.md`：**依赖清单与补全手册**。缺什么、按平台怎么装、装完怎么验。
 - `references/sites.md`：**每个站点的入口、建议操作、抓什么、坑在哪**。动手前先看对应站点那一节。
 - `references/troubleshooting.md`：**浏览器控制的踩坑手册**（白屏、窗口消失、验证码、代理连不上、Cloudflare、登录墙、关不掉）。出问题先查它。
 - `references/windows.md`：Windows 上的路径、Chrome 启动、端口、编码、权限差异与解法。
 - `references/reporting.md`：**汇报规范**（先问后查、三要素溯源、确定性分档、报告结构、自检清单）。
 - `references/automation-prompt.md`：定时任务提示词模板与排班建议。
-- `scripts/doctor.py`：**环境自检**（浏览器、CDP 通道、代理、网络、台账、登录态），首次必跑。
-- `scripts/browser_cdp.ps1`：Windows 版浏览器启动/探活/关闭。
+- `scripts/browser.py`：**自带的跨平台 CDP 控制器**（零依赖）：启动 / 探活 / 开标签 / 执行 JS / 导出 cookie / 关闭。
+- `scripts/doctor.py`：**环境自检 + 依赖补全**（`--plan` 看缺什么，`--fix` 自动补安全项）。
 - `scripts/ledger.py`：商品级去重、扫描台账、回查。
+- `scripts/assemble.py`：**feed 输出 → pick 输入**的转换层（识别来源、分好价/羊毛、抽额度、字段自检）。
 - `scripts/pick.py`：**选品器**——门槛校验、新鲜度、同款合并、打分排序、限额，输出选中与剔除原因。
 - `scripts/smzdm_feed.py`：smzdm 列表解析与详情核验（含发布时间、省额）。
 - `scripts/v2ex_feed.py`：V2EX 优惠信息（直连 API，含回复失效判定）。
 - `scripts/iqnew_feed.py`：爱Q生活网活动线报（直连，银行立减金/话费/红包）。
+- `scripts/browser_cdp.ps1`：Windows 专用启动器，**旧版兼容保留**；新环境优先用 `browser.py`。
 

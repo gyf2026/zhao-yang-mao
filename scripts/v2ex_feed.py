@@ -20,6 +20,7 @@
 """
 import argparse, html, json, re, sys, urllib.error, urllib.request
 from datetime import datetime
+from _compat import fix_stdio
 
 UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
@@ -127,6 +128,7 @@ def detail(topic_id: str, max_replies=20):
 
 
 def main():
+    fix_stdio()
     ap = argparse.ArgumentParser(description="抓 V2EX 羊毛节点（直连 API）")
     ap.add_argument("--node", default="deals", help="节点名，默认 deals")
     ap.add_argument("--detail", help="主题 ID，拉正文与回复做失效判定")

@@ -25,6 +25,7 @@
 """
 import argparse, html, json, re, sys, time, urllib.error, urllib.request
 from datetime import datetime
+from _compat import fix_stdio
 
 UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
@@ -113,6 +114,7 @@ def parse(h: str):
 
 
 def main():
+    fix_stdio()
     ap = argparse.ArgumentParser(description="抓爱Q生活网活动线报（直连）")
     ap.add_argument("--page", type=int, default=1)
     ap.add_argument("--pages", type=int, default=1, help="连续抓几页，默认 1")

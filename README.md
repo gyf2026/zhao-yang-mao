@@ -84,11 +84,22 @@ python3 scripts/ledger.py init      # Windows 用 python
 ## 第一步：环境自检（**别跳过**）
 
 ```bash
-python3 scripts/doctor.py          # 七项检查，退出码 0=能跑 / 1=有条件阻塞 / 2=致命
-python3 scripts/doctor.py --json   # 机器可读
+python3 scripts/doctor.py --plan   # 先看缺什么（按阻塞优先级排好）
+python3 scripts/doctor.py --fix    # 自动补安全项（建目录、初始化台账）
+python3 scripts/doctor.py          # 复检，退出码 0=能跑 / 1=有缺失 / 2=致命
 ```
 
-查七项：系统与 Python、外置浏览器、CDP 控制通道、代理、网络、台账、登录态。
+**依赖只有两样：Python ≥ 3.8 + 一个 Chromium 内核浏览器。** 没有 node、没有第三方 Python 包、不需要额外装技能——CDP 控制器 `scripts/browser.py` 是自带的，连 WebSocket 都自己实现了。
+
+`--plan` 输出的每一项都带 `kind`，Agent 按它行事：
+
+| kind | 含义 | 该怎么做 |
+|---|---|---|
+| `auto` | 只动本技能自己的数据目录 | 直接执行，不用问 |
+| `install` | 要装软件 | 问一句，同意后执行，**装完必须复检** |
+| `manual` | 代理 / 登录 / 换 Python 版本 | 转告用户，给具体步骤 |
+
+完整依赖清单和各平台安装命令见 `references/dependencies.md`。
 
 **为什么必须查**：A 段靠直连脚本，但 B 段（X / LINUX DO / 券）和大部分时效核验**全靠真浏览器 + 登录态**。这一环断了，技能不会报错，只会安静地少推几条——你以为在盯，其实半瞎。
 
@@ -174,26 +185,29 @@ python3 scripts/v2ex_feed.py                    # V2EX 优惠信息（话费/会
 python3 scripts/v2ex_feed.py --detail 1254773   # 拉回复判"已失效"
 python3 scripts/iqnew_feed.py                   # 爱Q生活网（银行立减金/话费/红包）
 
-# 4. 随机延迟（定时巡检用，反风控）
+# 4. 串成一条链：feed → 转换 → 选品（A/B 段都走这条，别手工拼 JSON）
+python3 scripts/assemble.py v2ex.json iqnew.json --watch "血糖仪,话费" \
+  | python3 scripts/pick.py --max 3 --max-per-cate 2
+
+# 5. 随机延迟（定时巡检用，反风控）
 python3 scripts/ledger.py jitter --min 60 --max 540
 
-# 5. 同款去重（退出码 1 = 同款推过且不更便宜，不推）
+# 6. 同款去重（退出码 1 = 同款推过且不更便宜，不推）
 python3 scripts/ledger.py check --title "雅培瞬感3代 动态血糖仪" --product "雅培瞬感3代" --price 499
 ```
 
 被验证码拦时会返回 `{"blocked": true}` 并退出（码 2）——**这是明确的失败，不是"今天没有好价"**。切浏览器取数，仍拿不到就跳过本轮，绝不把空结果当结论。
 
-浏览器部分（搜索页、X、Cloudflare 站点）需要真 Chrome + CDP 直控：
+浏览器部分（搜索页、X、Cloudflare 站点、登录后才能看的内容）走自带的 CDP 控制器，**三平台同一份命令**：
 
 ```bash
-# macOS：用 browser-cdp-control 技能
-~/.workbuddy/skills/browser-cdp-control/scripts/browser_cdp.sh start "<URL>" --session deal-hunter --detach
-CDP_PORT=9315 node ~/.workbuddy/skills/browser-cdp-control/scripts/cdp.js list
-
-# Windows：本仓库自带
-.\scripts\browser_cdp.ps1 start "https://www.smzdm.com/" -Session deal-hunter
-.\scripts\browser_cdp.ps1 status -Session deal-hunter
+python3 scripts/browser.py start "https://faxian.smzdm.com/" --session deal-hunter
+python3 scripts/browser.py eval  "document.title" --session deal-hunter
+python3 scripts/browser.py cookies --session deal-hunter --save ~/.workbuddy/deal-hunter/cookies/x.json
+python3 scripts/browser.py stop  --session deal-hunter
 ```
+
+不需要 node、不需要额外技能。`browser.py find` 看本机有哪些浏览器可用。
 
 ---
 
@@ -217,19 +231,23 @@ deal-hunter/
 ├── SKILL.md                     主流程、门槛、格式
 ├── references/
 │   ├── onboarding.md            首次使用：自检 → 装浏览器 → 问方向 → 定计划
+│   ├── dependencies.md          依赖清单、各平台安装、补全流程、实测矩阵
 │   ├── sites.md                 每个站：入口/建议操作/抓什么/坑
 │   ├── troubleshooting.md       浏览器踩坑手册 + 排查决策树
 │   ├── windows.md               Windows 差异与解法
 │   ├── reporting.md             汇报规范（先问后查、三要素、确定性分档）
 │   └── automation-prompt.md     定时任务提示词模板
 ├── scripts/
-│   ├── doctor.py                环境自检（浏览器/CDP/代理/网络/台账/登录态）
-│   ├── ledger.py                商品级去重 / 扫描台账 / 回查 / 随机延迟（跨平台）
+│   ├── doctor.py                环境自检 + 依赖补全（--plan / --fix）
+│   ├── browser.py               跨平台 CDP 控制器（零依赖，自己实现 WebSocket）
+│   ├── _compat.py               Windows 控制台编码与 stdin 兜底
+│   ├── ledger.py                商品级去重 / 扫描台账 / 回查 / 随机延迟
+│   ├── assemble.py              feed 输出 → pick 输入（字段转换 + 类型标注 + 自检）
 │   ├── pick.py                  选品器：门槛、新鲜度、同款合并、打分排序、限额
-│   ├── smzdm_feed.py            smzdm 列表与详情直连解析（跨平台）
+│   ├── smzdm_feed.py            smzdm 列表与详情直连解析
 │   ├── v2ex_feed.py             V2EX 优惠信息（直连 API + 回复失效判定）
 │   ├── iqnew_feed.py            爱Q生活网线报（直连，GBK 编码已处理）
-│   └── browser_cdp.ps1          Windows 浏览器启动/探活/关闭
+│   └── browser_cdp.ps1          Windows 旧版启动器（兼容保留，优先用 browser.py）
 └── assets/
     └── watchlist.example.md     关注清单模板
 ```
@@ -268,11 +286,14 @@ deal-hunter/
 
 | 部分 | macOS / Linux | Windows |
 |---|---|---|
-| Python 脚本 | ✓ | ✓（命令是 `python`） |
-| 浏览器启动 | 依赖 `browser-cdp-control` 技能 | 自带 `browser_cdp.ps1` |
-| 已知差异 | 代理变量污染、进程组回收 | Chrome 单实例吞参数、`.bat` 中文乱码、`curl` 是别名 |
+| Python 脚本 | ✓ 实测 | ✓ 代码按平台分支写，控制台编码已兜底（未实机验证） |
+| 浏览器控制 | `scripts/browser.py` ✓ 实测 | 同左，用 `DETACHED_PROCESS` 脱离父进程（未实机验证） |
+| 数据目录 | `~/.workbuddy/deal-hunter` | `%USERPROFILE%\.workbuddy\deal-hunter`，两者都可用 `DEAL_HUNTER_HOME` 覆盖 |
+| 已知差异 | 代理变量污染 | `python` 而非 `python3`、路径带空格要引号、控制台代码页 |
 
-Windows 十条必看：`python3`→`python`、`curl`→`curl.exe`、bypass 用分号、Chrome 必须独立 `user-data-dir`、杀进程按 PID、`.ps1` 存 UTF-8 BOM、本地请求加 `-NoProxy`、Node 需 ≥22、中文路径加引号、代理端口自己查。详见 `references/windows.md`。
+Windows 细节：`python3`→`python`、`curl`→`curl.exe`、bypass 用分号、Chrome 必须独立 `user-data-dir`、杀进程按 PID、`.ps1` 存 UTF-8 BOM、中文路径加引号。详见 `references/windows.md`。
+
+**哪些真测过**：`references/dependencies.md` 末尾有实测矩阵。macOS 全流程实测；Windows / Linux 的代码路径写了但没实机跑过，遇到问题按实际现象改，别默认是逻辑错。
 
 ---
 

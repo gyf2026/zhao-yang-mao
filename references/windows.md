@@ -1,7 +1,9 @@
 # Windows 适配：会出什么问题、怎么解决
 
-> 本技能主体脚本是 zsh + Python。**Python 部分跨平台直接能用**，shell 脚本部分必须换成等价的 PowerShell。
-> 这一节把 Windows 上必然遇到的差异逐条列清楚，照着改就行。
+> **2026-11-07 更新**：浏览器控制已改为自带的 `scripts/browser.py`（纯 Python + 自己实现的 WebSocket），
+> **三平台同一份代码**，不再需要单独的 PowerShell 版本。`browser_cdp.ps1` 只为旧环境兼容保留。
+> 所以下文的 shell 差异，现在只剩「命令名、路径、编码」三件事。
+> Windows 未实机验证的部分，在 `references/dependencies.md` 的实测矩阵里标了，别当成已验证。
 
 ---
 
@@ -29,7 +31,9 @@ $env:DEAL_HUNTER_HOME = "$env:USERPROFILE\.workbuddy\deal-hunter"
 
 - Windows 上命令是 **`python`**，不是 `python3`。脚本内部没有硬编码解释器名，直接 `python scripts\smzdm_feed.py` 即可。
 - 脚本里的文件读写全部显式 `encoding="utf-8"`，中文不会乱码。
-- 控制台输出中文乱码时先执行 `chcp 65001`，或改用 Windows Terminal。
+- **控制台编码已在代码里处理**：所有脚本启动时调 `_compat.fix_stdio()`，把 stdout/stderr 切到 UTF-8 容错。
+  以前 Windows 上 `print` 中文或 `✓ ×` 会抛 `UnicodeEncodeError` 直接崩在最后一行，现在不会了。
+  想要正常显示中文，仍然建议 `chcp 65001` 或直接用 Windows Terminal。
 - `scripts/smzdm_feed.py` 用 `urllib` 并显式清空代理（`ProxyHandler({})`），Windows 系统代理也不会污染国内站抓取。
 - 定时任务里的随机延迟：`python scripts\ledger.py jitter`（60–540 秒），跨平台一致。
 

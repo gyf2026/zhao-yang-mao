@@ -18,6 +18,7 @@ import argparse, json, os, random, re, shutil, sys, time
 from datetime import datetime
 from difflib import SequenceMatcher
 from urllib.parse import urlparse
+from _compat import fix_stdio
 
 HOME = os.path.expanduser(os.environ.get("DEAL_HUNTER_HOME", "~/.workbuddy/deal-hunter"))
 SKILL_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -288,6 +289,7 @@ def cmd_skip(a):
 
 
 def main():
+    fix_stdio()
     p = argparse.ArgumentParser(description="deal-hunter 台账与去重工具")
     sp = p.add_subparsers(dest="cmd", required=True)
     sp.add_parser("init").set_defaults(f=cmd_init)

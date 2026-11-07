@@ -21,6 +21,7 @@
 """
 import argparse, html, json, re, sys, urllib.request
 from datetime import datetime
+from _compat import fix_stdio
 
 UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36")
@@ -167,6 +168,7 @@ def detail(url: str):
 
 
 def main():
+    fix_stdio()
     ap = argparse.ArgumentParser()
     ap.add_argument("url", nargs="?")
     ap.add_argument("--channel", default="all", choices=list(CHANNELS))
