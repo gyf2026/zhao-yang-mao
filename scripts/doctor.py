@@ -282,9 +282,17 @@ def check_data():
                 "advice": "关注清单缺了会问不出方向，台账缺了就没法去重和回查",
                 "fix": init_fix, "files": state}
     if empty:
-        return {"key": "data", "status": WARN, "blocking": False, "title": "数据目录",
-                "detail": f"存在，但台账是空的（{','.join(empty)}）",
-                "advice": "空台账 = 从没真跑过一轮。先手动跑通再开定时任务",
+        # 只有"一份记录都没有"才算没跑过。单看 pushed.jsonl 会误判：
+        # 只跑羊毛那一段时好价台账本来就是空的（2026-11-07 实测踩到）。
+        ledgers = ("pushed.jsonl", "pushed-wool.jsonl", "scan.jsonl")
+        ran = any(state.get(f) for f in ledgers)
+        if not ran:
+            return {"key": "data", "status": WARN, "blocking": False, "title": "数据目录",
+                    "detail": f"存在，但台账全是空的（{','.join(empty)}）",
+                    "advice": "空台账 = 从没真跑过一轮。先手动跑通再开定时任务",
+                    "fix": [], "files": state}
+        return {"key": "data", "status": OK, "blocking": False, "title": "数据目录",
+                "detail": f"{DATA} 正常，已跑过（空的是 {','.join(empty)}）",
                 "fix": [], "files": state}
     return {"key": "data", "status": OK, "blocking": False, "title": "数据目录",
             "detail": f"{DATA} 正常", "fix": [], "files": state}
