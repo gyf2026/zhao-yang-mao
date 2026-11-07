@@ -115,12 +115,15 @@ def check_browser(browsers):
         return {"key": "browser", "status": FAIL, "title": "外置浏览器",
                 "detail": "没找到任何 Chromium 内核浏览器", "advice": tip}
     top = browsers[0]
+    names = [b["name"] for b in browsers]
     warn = ""
     # Chrome 单独挑出来说：它不是"随便一个能开的浏览器"，而是登录态容器
     if top["name"] not in ("Chrome", "Edge"):
         warn = "当前首选不是 Chrome/Edge，能用但 CDP 兼容性问题更多；出怪问题时优先换 Chrome 试"
-    return {"key": "browser", "status": WARN if warn else OK, "title": "外置浏览器",
-            "detail": f"找到 {len(browsers)} 个，首选 {top['name']}"
+    elif "QQ浏览器" in names:
+        warn = "Chrome 是首选；若 WorkBuddy 环境下 Chrome 出现窗口收不到指令之类的怪问题，可换 QQ 浏览器对照一下"
+    return {"key": "browser", "status": OK, "title": "外置浏览器",
+            "detail": f"找到 {len(browsers)} 个（{'、'.join(names)}），首选 {top['name']}"
                       + (f"（{top['version']}）" if top["version"] else ""),
             "advice": warn, "browsers": browsers}
 
