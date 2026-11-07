@@ -87,18 +87,25 @@ def gate(r, watch):
     ratio = save / (price + save) if price and (price + save) > 0 else 0.0
     has_newlow = any(w in label for w in NEWLOW_WORDS)
 
-    if r.get("错价"):
-        return True, "a", "标价与商品明显不符"
+    # 顺序刻意是「关注清单 → 历史最优 → 大幅让利 → 错价」：
+    # 找好价的主线是"你想要的东西拿到最佳优惠"，不是"抓到错价"。
+    if is_watched(r, watch) and target is not None and price is not None and price <= target:
+        return True, "a", f"关注清单命中：{price:g} 元 ≤ 目标价 {target:g} 元"
+    if is_watched(r, watch) and hist is not None and price is not None and price <= hist:
+        return True, "a", f"关注清单命中且不高于历史最低价 {hist:g} 元"
+    if is_watched(r, watch) and save >= 100:
+        return True, "a", f"关注清单命中且省 {save:g} 元"
+    if hist is not None and price is not None and price <= hist:
+        return True, "b", f"低于历史最低价 {hist:g} 元（现价 {price:g}）"
     if has_newlow and (save >= 100 or ratio >= 0.5):
         return True, "b", f"标注「{label}」且省 {save:g} 元"
+    if r.get("错价"):
+        # 放在"大幅让利"之前判，否则错价会被算成"券后省 99%"，报告里就看不见它是错价了
+        return True, "d", "标价与商品明显不符"
+    if ratio >= 0.5 and save >= 50:
+        return True, "c", f"券后省 {ratio:.0%}（{save:g} 元）"
     if zhi >= 20 and zhi / (zhi + buzhi or 1) >= 0.8 and has_newlow:
-        return True, "c", f"值率{zhi / (zhi + buzhi):.0%}、票数{zhi:g}，且标注「{label}」"
-    if is_watched(r, watch) and target is not None and price is not None and price <= target:
-        return True, "d", f"关注清单命中：{price:g} 元 ≤ 目标价 {target:g} 元"
-    if is_watched(r, watch) and save >= 100:
-        return True, "d", f"关注清单命中且省 {save:g} 元"
-    if is_watched(r, watch) and hist is not None and price is not None and price < hist:
-        return True, "d", f"关注清单命中且低于历史推送价 {hist:g} 元"
+        return True, "b", f"值率{zhi / (zhi + buzhi):.0%}、票数{zhi:g}，且标注「{label}」"
     return False, "", f"未达门槛（省 {save:g} 元{'，有' if has_newlow else '，无'}新低标注）"
 
 
@@ -118,7 +125,11 @@ def score(r, basis, watch):
     ratio = save / (price + save) if price and (price + save) > 0 else 0.0
     s = 0.0
     s += 100 if is_watched(r, watch) else 0
-    s += 80 if r.get("错价") else 0
+    s += 60 if r.get("错价") else 0
+    # 确证最优比"偶发错价"更值得排前面：错价常被砍单，历史最低是能真买到的
+    _p, _h = f(r.get("价格")), f(r.get("历史最低价"))
+    if _h is not None and _p is not None and _p <= _h:
+        s += 40
     s += min(30.0, save / 10.0)
     s += min(25.0, ratio * 50)
     if any(w in label for w in TARGET_WORDS):
@@ -191,8 +202,11 @@ def main():
         if len(picked) >= a.max:
             dropped.append({"标题": str(r.get("标题", ""))[:40], "原因": f"超出每轮 {a.max} 条上限（评分 {r['评分']}）"})
             continue
-        cate = str(r.get("品类") or "未分类")
-        if a.max_per_cate and per_cate.get(cate, 0) >= a.max_per_cate:
+        # 品类为空时不受"单品类"限制：否则所有未分类条目会挤进同一个"未分类"桶，
+        # 实际把 3 条的总上限悄悄压成 2 条（2026-11-07 实测踩到）。
+        raw_cate = str(r.get("品类") or "").strip()
+        cate = raw_cate or "未分类"
+        if a.max_per_cate and raw_cate and per_cate.get(cate, 0) >= a.max_per_cate:
             dropped.append({"标题": str(r.get("标题", ""))[:40], "原因": f"同品类已满 {a.max_per_cate} 条"})
             continue
         per_cate[cate] = per_cate.get(cate, 0) + 1
