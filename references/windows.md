@@ -9,20 +9,25 @@
 
 ## 一、目录与路径
 
-| macOS / Linux | Windows |
-|---|---|
-| `~/.workbuddy/skills/deal-hunter` | `%USERPROFILE%\.workbuddy\skills\deal-hunter` |
-| `~/.workbuddy/deal-hunter`（数据目录） | `%USERPROFILE%\.workbuddy\deal-hunter` |
+技能装在哪，看你用的客户端，Windows 上通常是：
+
+| 客户端 | 技能目录 | 数据目录（自动） |
+|---|---|---|
+| WorkBuddy | `%USERPROFILE%\.workbuddy\skills\deal-hunter` | `%USERPROFILE%\.workbuddy\deal-hunter` |
+| Claude Code | `%USERPROFILE%\.claude\skills\deal-hunter` | `%USERPROFILE%\.claude\deal-hunter` |
+| 其它 / 直接放项目里 | 任意位置 | `%USERPROFILE%\.deal-hunter` |
+
+不确定就跑一下 `python scripts\_paths.py`，它会打印最终路径和判定依据，别猜。
 
 **坑**：
 - PowerShell 里 `~` 能用，但 `.bat` 里不能，且 `cd ~` 不会展开。统一用 `$env:USERPROFILE`。
 - **路径带中文或空格时必须加引号**。本机 `%USERPROFILE%` 若是中文名（如 `C:\Users\张三`），会连带影响所有路径。
 - 不要在 `.bat` / `.cmd` 里写中文路径 —— 控制台代码页不是 UTF-8，会变成乱码导致文件找不到。要写中文，用 `.ps1` 并存成 **UTF-8 with BOM**。
 
-环境变量（PowerShell，只在当前会话生效）：
+想让多个客户端共用一份台账，显式指定（PowerShell，只在当前会话生效）：
 
 ```powershell
-$env:DEAL_HUNTER_HOME = "$env:USERPROFILE\.workbuddy\deal-hunter"
+$env:DEAL_HUNTER_HOME = "$env:USERPROFILE\.deal-hunter"
 ```
 
 ---
@@ -66,9 +71,12 @@ $chrome = @(
 必须给一个**全新的、独立的**目录：
 
 ```powershell
-$profile = "$env:USERPROFILE\.workbuddy\browser-profiles\deal-hunter"
+# 与 scripts/_paths.py 解析出来的 profile 根目录保持一致
+$profile = "$env:USERPROFILE\.deal-hunter\browser-profiles\deal-hunter"
 New-Item -ItemType Directory -Force -Path $profile | Out-Null
 ```
+
+> 用 `scripts\browser.py start` 时会自动按 `--session` 建好 profile，不用手写这一段；这里是手工启动时的参考。
 
 ### 3. 启动命令
 
@@ -139,12 +147,11 @@ curl.exe -x http://127.0.0.1:7890 -o NUL -w "%{http_code}" https://x.com/
 
 ---
 
-## 五、Node（跑 cdp.js 需要）
+## 五、Node（**不需要**）
 
-- WorkBuddy 自带 Node 在 `%USERPROFILE%\.workbuddy\binaries\node\versions\<ver>\node.exe`。
-- 若 `node -v` 报错，直接用绝对路径调用；或 `winget install OpenJS.NodeJS.LTS`。
-- `cdp.js` 依赖 Node 内置 `WebSocket`（Node ≥ 22）。**Node 18/20 没有全局 WebSocket，会静默失败**（报 `WebSocket is not defined` 或被 catch 掉）。
-- `NODE_PATH` 在 Windows 用分号分隔，若脚本需要：`$env:NODE_PATH = "$env:USERPROFILE\.workbuddy\binaries\node\workspace\node_modules"`。
+- 本技能的 CDP 控制器是纯 Python（`scripts/browser.py`，WebSocket 自己实现），**不用 Node、不用 `cdp.js`、不用 `websocket-client`**。
+- 只有你在参考旧资料（`browser-cdp-control` 那套 `cdp.js`）时才需要 Node ≥ 22，因为它依赖 Node 内置的 `WebSocket`；本技能不依赖。
+- 如果某个客户端自带 Node，不用管它，跑脚本时也不会调用。
 
 ---
 
@@ -171,7 +178,7 @@ curl.exe -x http://127.0.0.1:7890 -o NUL -w "%{http_code}" https://x.com/
 
 ## 八、定时巡检
 
-- WorkBuddy 的定时任务（automation）跨平台一致，直接用。
+- 用客户端自带的定时任务机制就跨平台一致，直接用。
 - 若改用 **Windows 计划任务**，注意：
   - "只在用户登录时运行"才看得到浏览器窗口（登录类任务必须这样）。
   - 起始目录要显式设置，否则相对路径找不到脚本。

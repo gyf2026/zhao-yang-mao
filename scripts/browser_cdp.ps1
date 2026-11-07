@@ -38,7 +38,10 @@ $ErrorActionPreference = 'Stop'
 $env:NO_PROXY = '127.0.0.1,localhost'
 $env:no_proxy = '127.0.0.1,localhost'
 
-$ProfileRoot = Join-Path $env:USERPROFILE '.workbuddy\browser-profiles'
+# profile 根目录：优先环境变量，否则放在通用默认数据目录下（与 _paths.py 的兜底一致）
+# 这不是给日常浏览器用的，是本脚本自己起的独立实例，不能和用户日常 profile 混用
+$DataHome = if ($env:DEAL_HUNTER_HOME) { $env:DEAL_HUNTER_HOME } else { Join-Path $env:USERPROFILE '.deal-hunter' }
+$ProfileRoot = if ($env:DEAL_HUNTER_PROFILE_ROOT) { $env:DEAL_HUNTER_PROFILE_ROOT } else { Join-Path $DataHome 'browser-profiles' }
 
 function Get-Port {
   param([string]$Name, [int]$Explicit)

@@ -47,12 +47,11 @@
 **详情页被拦时的浏览器核验（跑这一段）**
 
 ```bash
-cd ~/.workbuddy/skills/browser-cdp-control/scripts
-export CDP_PORT=9315 NODE_PATH=/Users/fgy/.workbuddy/binaries/node/workspace/node_modules
-node cdp.js newtab "https://www.smzdm.com/p/185236762/"     # 开新标签，不抢已有页
-node cdp.js list                                            # 取 targetId
-node cdp.js eval <id> 'document.title'                       # 标题里带 "【省X元】"
-node cdp.js eval <id> 'document.body.innerText.replace(/\n+/g," / ").slice(0,400)'
+python3 scripts/browser.py open "https://www.smzdm.com/p/185236762/" --session deal-hunter  # 开新标签，不抢已有页
+python3 scripts/browser.py list --session deal-hunter                                      # 取 targetId
+python3 scripts/browser.py eval --session deal-hunter "document.title"                     # 标题里带 "【省X元】"
+python3 scripts/browser.py eval --session deal-hunter 'document.body.innerText.replace(/\n+/g," / ").slice(0,400)'
+# 页面里有多个标签时用 --target <id> 指定，否则默认取第一个 page
 ```
 
 正文里同时能看到：更新时间（`更新时间：23:10`）、值/不值票数、优惠构成（立减/满减券/淘金币）、爆料原文。
@@ -199,7 +198,7 @@ node cdp.js eval <id> 'document.body.innerText.replace(/\n+/g," / ").slice(0,400
 - **必须走代理**：国内直连不通。Chrome 启动时要显式给 `--proxy-server`，并让 `x.com` 不在 bypass 名单里。
 - **限流**：短时间滚动太快会触发 "Something went wrong"，等几分钟再来，别反复刷新加重风控。
 - 图片/视频懒加载，正文文本不受影响；但"图里才有兑换码"的帖子读不到码，要截图交给用户看。
-- 登录 cookie 多为 session cookie，**关窗即失效**，登录成功后立刻 `dumpcookie` 存盘。
+- 登录 cookie 多为 session cookie，**关窗即失效**，登录成功后立刻 `python3 scripts/browser.py cookies --session deal-hunter-x --save <数据目录>/cookies/x.json` 备份；profile 本身也会持久化登录态，两者叠加最稳。
 
 ---
 

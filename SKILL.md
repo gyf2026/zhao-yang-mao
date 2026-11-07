@@ -47,7 +47,7 @@ python3 scripts/doctor.py          # 补完复检，退出码 0=能跑 1=有缺�
 3. 有固定 profile、关掉再开还是登录态吗？每次都是干净临时目录 → **等于没有**。
 4. 能拿到 cookie 并落盘复用吗？拿不到 → **对 X / LINUX DO 等于零**。
 
-> WorkBuddy 内置的浏览器控制在连接失败时会静默回退到自带 Chromium（报成功但窗口收不到指令），**必须用外置浏览器 + 自带的 `scripts/browser.py`**。Hermes / OpenClaw / ChatGPT 这类有内置浏览器，但 profile 多是临时的、登录态存不住，**仍然建议改用外置**——理由就是要存 cookie。
+> 多数客户端（WorkBuddy、Hermes、OpenClaw、ChatGPT 一类）都自带浏览器控制，但两类毛病很常见：**连接失败时静默回退**（报「完成」、窗口却收不到指令，读到的是另一个浏览器的页面），以及 **profile 是临时的**、关掉就没了。所以这里一律用外置浏览器 + 自带的 `scripts/browser.py`，理由只有一个：cookie 得存得住。
 
 缺浏览器时按这张表装（**只有 Chromium 内核支持 CDP**）：
 
@@ -85,7 +85,17 @@ python3 scripts/browser.py stop  --session selftest
 
 ## 数据目录
 
-`~/.workbuddy/deal-hunter/`（首次运行 `python3 scripts/ledger.py init` 创建，路径相对本 skill 目录）
+**不绑定任何宿主。** 首次运行 `python3 scripts/ledger.py init` 创建，位置由 `scripts/_paths.py` 按顺序解析：
+
+| 顺序 | 条件 | 数据落在 |
+|---|---|---|
+| 1 | 设了 `DEAL_HUNTER_HOME` | 该路径。**想让多个客户端共用一份台账，就设它** |
+| 2 | 技能装在 `<宿主>/skills/deal-hunter` | `<宿主>/deal-hunter`（WorkBuddy → `~/.workbuddy/deal-hunter`；Claude Code → `~/.claude/deal-hunter`） |
+| 3 | 其它位置（如直接放在项目里） | `~/.deal-hunter`，不往别人的代码仓库里写数据 |
+
+查当前解析结果：`python3 scripts/_paths.py`。**装到哪里由你所在客户端的规范决定，本技能不假设**——只要保持 `<宿主>/skills/deal-hunter` 这个结构，数据自动跟着宿主走。
+
+下面这些文件都放在数据目录下：
 
 | 文件 | 用途 |
 |---|---|
@@ -128,7 +138,7 @@ python3 scripts/ledger.py history "雅培瞬感3代"    # 单品价格变化史
    - macOS：接电源、开盖、别点睡眠；长时间守候可挂 `caffeinate -dimsu`。
    - Windows：电源计划"接通电源时进入睡眠"设为**从不**；"关闭盖子时"设为**不采取任何操作**；网卡电源管理取消"允许关闭此设备以节约电源"。
 2. **代理软件要保持运行**（Clash / v2rayN 等），否则 X、Slickdeals、DealMoon 全部拉不到；建议设开机自启。
-3. **登录态会过期，但 Agent 不碰你的账号密码。** 登录是你在浏览器窗口里自己扫码/输验证码完成的；Agent 只在登录成功后导出 cookie 存到本机（`~/.workbuddy/deal-hunter/cookies/`），下次直接用这个 cookie 免登，**密码全程不经手、不保存**。识别到登录墙就跳过本轮、不推半成品，并在下次成功运行时提醒你重新登录。cookie 也只存在你自己的电脑上，不外传。
+3. **登录态会过期，但 Agent 不碰你的账号密码。** 登录是你在浏览器窗口里自己扫码/输验证码完成的；Agent 只在登录成功后导出 cookie 存到本机（`<数据目录>/cookies/`），下次直接用这个 cookie 免登，**密码全程不经手、不保存**。识别到登录墙就跳过本轮、不推半成品，并在下次成功运行时提醒你重新登录。cookie 也只存在你自己的电脑上，不外传。
 
 **排班建议**：每 2 小时一轮、只跑 08:00–23:00。好价通常几小时就被抢完，过密只是徒增风控风险；夜间没有新爆料。大促日可临时调到 1 小时。
 
@@ -197,18 +207,19 @@ python3 scripts/browser.py list  --session deal-hunter          # 取 targetId
 python3 scripts/browser.py open  "<URL>" --session deal-hunter   # 开新标签（不抢已有页）
 python3 scripts/browser.py eval  "表达式" --session deal-hunter   # 抓结构化数据
 python3 scripts/browser.py eval  "({t:document.title,n:document.querySelectorAll('.feed-block').length})"
-python3 scripts/browser.py cookies --session deal-hunter --save ~/.workbuddy/deal-hunter/cookies/x.json
+python3 scripts/browser.py shot  /tmp/x.png --session deal-hunter   # 图里才有兑换码时，截图给用户看
+python3 scripts/browser.py cookies --session deal-hunter --save <数据目录>/cookies/x.json
 python3 scripts/browser.py front <targetId> --session deal-hunter   # 需要用户登录时切前台
 python3 scripts/browser.py stop  --session deal-hunter
 ```
 
 - `eval` 里**直接写对象字面量**（`({a:1})`）就能拿到 JSON，不要套 `JSON.stringify`，否则会多一层转义。
 - 端口与 profile 由 `--session` 名字经 CRC32 映射到 93xx，同名必得同一端口、同一 profile，国内/境外各用一个 session 互不干扰。
-- profile 落在 `~/.workbuddy/browser-profiles/<session>`，**关掉再开还是登录态**。
+- profile 落在 `<数据目录>/browser-profiles/<session>`，**关掉再开还是登录态**。
 - **代理端口会变**：每次以 `env | grep -i proxy` 的实际值为准，别用记下来的旧端口（写错会得到 `ERR_PROXY_CONNECTION_FAILED`）。
 - 登录成功后立刻 `cookies --save`，session cookie 关窗就没了。cookie 文件含登录凭据，**只存本机，不要提交到仓库**。
 - 浏览器出任何问题（白屏 / 窗口消失 / 验证码 / 代理连不上 / Cloudflare / 登录墙），先查 `references/troubleshooting.md` 的决策树；装不上浏览器查 `references/dependencies.md`。
-- 旧环境里如果还装着 `browser-cdp-control` 技能，也能用（`browser_cdp.sh` / `browser_cdp.ps1`），但**不再是必需项**，优先用自带的 `browser.py`。
+- 旧环境里如果还装着别的 CDP 脚本（如 `browser-cdp-control` 的 `browser_cdp.sh`），也能用，但**不是必需项**，优先用自带的 `browser.py`。
 
 **国内站先排除代理污染**：本机常有 `HTTP_PROXY` 变量，会让国内站流量走海外节点而被风控。命令行抓国内站一律加 `--noproxy '*'`（脚本已内置）。详见 `cn-platform-collection` 技能第零条铁律。
 
@@ -370,7 +381,7 @@ python3 scripts/ledger.py history "<商品名>"     # 单品价格变化史
 | `ledger.py`、`smzdm_feed.py`、`v2ex_feed.py`、`iqnew_feed.py`、`doctor.py` | ✓ | ✓ 直接用（命令是 `python` 不是 `python3`） |
 | `smzdm_feed.py`（抓取） | ✓ | ✓ urllib 已显式清代理，系统代理不影响 |
 | 浏览器启动 | `scripts/browser.py`（三平台同一份，纯 Python）；进程用 `start_new_session` 脱离 shell | 同左，改用 `DETACHED_PROCESS` 脱离父进程 |
-| 数据目录 | `~/.workbuddy/deal-hunter`（可用 `DEAL_HUNTER_HOME` 覆盖） | 同为 `%USERPROFILE%\.workbuddy\deal-hunter`，同样支持环境变量 |
+| 数据目录 | `<数据目录>`，解析规则见 `## 数据目录`（`DEAL_HUNTER_HOME` 可覆盖） | 同左，路径是 `%USERPROFILE%` 下的对应目录 |
 | 必踩差异 | 代理变量污染、进程组回收 | Chrome 单实例吞参数、`curl` 是别名、`.bat` 中文乱码 |
 
 **Windows 上十条必看**（完整版 `references/windows.md`）：`python3`→`python`、`curl`→`curl.exe`、bypass 用分号、Chrome 必须独立 `user-data-dir`、杀进程按 PID 不按镜像名、`.ps1` 存 UTF-8 BOM、本地请求加 `-NoProxy`、Node 需 ≥22、中文路径全部加引号、代理端口自己查别照抄。
@@ -384,7 +395,8 @@ python3 scripts/ledger.py history "<商品名>"     # 单品价格变化史
 - `references/windows.md`：Windows 上的路径、Chrome 启动、端口、编码、权限差异与解法。
 - `references/reporting.md`：**汇报规范**（先问后查、三要素溯源、确定性分档、报告结构、自检清单）。
 - `references/automation-prompt.md`：定时任务提示词模板与排班建议。
-- `scripts/browser.py`：**自带的跨平台 CDP 控制器**（零依赖）：启动 / 探活 / 开标签 / 执行 JS / 导出 cookie / 关闭。
+- `scripts/browser.py`：**自带的跨平台 CDP 控制器**（零依赖）：启动 / 探活 / 开标签 / 执行 JS / 截图 / 导出 cookie / 关闭。
+- `scripts/_paths.py`：**数据目录解析**（不绑定宿主；`DEAL_HUNTER_HOME` 可覆盖；直接运行可看当前路径与判定依据）。
 - `scripts/doctor.py`：**环境自检 + 依赖补全**（`--plan` 看缺什么，`--fix` 自动补安全项）。
 - `scripts/ledger.py`：商品级去重、扫描台账、回查。
 - `scripts/assemble.py`：**feed 输出 → pick 输入**的转换层（识别来源、分好价/羊毛、抽额度、字段自检）。

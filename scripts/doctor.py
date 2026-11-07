@@ -20,6 +20,7 @@
 """
 import argparse, json, os, platform, shutil, socket, subprocess, sys
 import urllib.request
+from _paths import data_home, describe
 
 OK, WARN, FAIL = "ok", "warn", "fail"
 ICON = {OK: "[ok]", WARN: "[!]", FAIL: "[x]"}       # 不用 ✓×，Windows 控制台会乱码
@@ -27,7 +28,7 @@ MIN_PY = (3, 8)
 IS_WIN = platform.system() == "Windows"
 SYSNAME = platform.system()
 HOME = os.path.expanduser("~")
-DATA = os.path.expanduser(os.environ.get("DEAL_HUNTER_HOME", "~/.workbuddy/deal-hunter"))
+DATA = data_home()
 SKILL_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
@@ -150,7 +151,7 @@ def check_browser(browsers):
     if top["name"] not in ("Chrome", "Edge"):
         advice = "首选不是 Chrome/Edge，能用但 CDP 兼容性问题更多，出怪问题时换 Chrome"
     elif "QQ浏览器" in names:
-        advice = "Chrome 是首选；WorkBuddy 环境下 Chrome 若出现窗口收不到指令，可换 QQ 浏览器对照"
+        advice = "Chrome 是首选；若它在你这个客户端里出现「窗口收不到指令」，可换 QQ 浏览器对照"
     return {"key": "browser", "status": OK, "blocking": False, "title": "外置浏览器",
             "detail": f"找到 {len(browsers)} 个（{'、'.join(names)}），首选 {top['name']}"
                       + (f"（{top['version']}）" if top["version"] else ""),
@@ -180,18 +181,11 @@ def check_channel():
                 "fix": [{"kind": "manual", "desc": "自带控制器跑不起来，先确认 Python 环境完整，"
                                                   "或用外置方案：装 browser-cdp-control 技能"}]}
 
-    # 没有自带脚本时，看有没有外部技能可用（兼容旧环境）
-    bcc = os.path.join(HOME, ".workbuddy", "skills", "browser-cdp-control", "scripts")
-    sh_ = os.path.join(bcc, "browser_cdp.sh")
-    ps1 = os.path.join(bcc, "browser_cdp.ps1")
-    if os.path.exists(sh_) or os.path.exists(ps1):
-        return {"key": "channel", "status": WARN, "blocking": False,
-                "title": "浏览器控制",
-                "detail": "缺少自带 scripts/browser.py，但检测到 browser-cdp-control 技能，可临时用",
-                "fix": [{"kind": "manual", "desc": "重新拉取本仓库，scripts/browser.py 是自带的跨平台控制器"}]}
+    # 走到这里说明仓库不完整（browser.py 是本仓库自带的，不该缺）
     return {"key": "channel", "status": FAIL, "blocking": True, "title": "浏览器控制",
-            "detail": "既没有 scripts/browser.py，也没有 browser-cdp-control 技能",
-            "fix": [{"kind": "manual", "desc": "重新 clone 本仓库；scripts/browser.py 应该随仓库一起下发"}]}
+            "detail": "找不到 scripts/browser.py，仓库可能没下全",
+            "fix": [{"kind": "auto", "desc": "重新拉取本仓库，scripts/browser.py 是自带的跨平台控制器",
+                     "cmd": ["git", "-C", SKILL_DIR, "pull", "--ff-only"]}]}
 
 
 # --------------------------------------------------------------- 4. 代理
@@ -263,7 +257,7 @@ def check_net():
 
 
 # ----------------------------------------------------------- 6. 数据目录
-def check_data():
+def _check_data():
     files = {"watchlist.md": "关注清单", "pushed.jsonl": "好价台账",
              "pushed-wool.jsonl": "羊毛台账", "scan.jsonl": "扫描台账"}
     exists = os.path.isdir(DATA)
@@ -296,6 +290,18 @@ def check_data():
                 "fix": [], "files": state}
     return {"key": "data", "status": OK, "blocking": False, "title": "数据目录",
             "detail": f"{DATA} 正常", "fix": [], "files": state}
+
+
+def check_data():
+    """在结果里带上目录是怎么定下来的，方便 Agent 判断该往哪写、要不要搬。"""
+    r = _check_data()
+    try:
+        d = describe()
+        r["path"], r["source"], r["profiles"] = d["data"], d["why"], d["profiles"]
+        r["detail"] = f"{r['detail']}（{d['why']}）"
+    except Exception:
+        r["path"] = DATA
+    return r
 
 
 # ------------------------------------------------------------- 7. 登录态

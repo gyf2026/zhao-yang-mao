@@ -4,7 +4,7 @@
 
 **让你想买的东西，拿到此刻最好的价。**
 
-`WorkBuddy 技能` · `Claude Code 技能` · 全程只读 · 同款只推一次
+`通用 Agent 技能` · `WorkBuddy / Claude Code / 任意客户端` · 全程只读 · 同款只推一次
 
 </div>
 
@@ -108,23 +108,44 @@
 
 ## 安装
 
-把整个目录放到你的技能目录：
+**不绑定任何客户端。** 这个仓库就是一个「技能」目录：`SKILL.md` 是给 Agent 读的说明书，`scripts/` 是能直接跑的 Python（只用标准库）。装到哪里由你所用客户端的规范决定，下面是常见位置，不是硬规定：
+
+| 客户端 | 建议位置 | 说明 |
+|---|---|---|
+| WorkBuddy | `~/.workbuddy/skills/deal-hunter` | 用户级技能目录 |
+| Claude Code | `~/.claude/skills/deal-hunter` | 个人技能；项目内用 `<项目>/.claude/skills/deal-hunter` |
+| Codex / Cursor / 其它 | 该客户端文档里的 skills 目录 | 结构一般也是 `<配置目录>/skills/<技能名>` |
+| 没有技能机制 | 任意目录 | 直接跑 `scripts/*.py`、把 `SKILL.md` 当提示词喂给 Agent 也能用，只是不会自动触发 |
+
+**交给 Agent 自己判断**：它知道自己是什么客户端，去看一眼现有技能装在哪，装进同级目录即可。三种常见装法：
 
 ```bash
-# macOS / Linux
-git clone https://github.com/gyf2026/zhao-yang-mao.git ~/.workbuddy/skills/deal-hunter
+# A. clone 到技能目录（能 git pull 更新，推荐）
+git clone https://github.com/gyf2026/zhao-yang-mao.git <技能目录>/deal-hunter
 
-# Windows
-git clone https://github.com/gyf2026/zhao-yang-mao.git "%USERPROFILE%\.workbuddy\skills\deal-hunter"
+# B. 多客户端共用一份代码，用软链
+ln -s /path/to/zhao-yang-mao <技能目录>/deal-hunter
+
+# C. 只当脚本库用，不注册成技能
+git clone https://github.com/gyf2026/zhao-yang-mao.git ~/tools/deal-hunter
 ```
 
-首次运行初始化数据目录：
+初始化数据目录，顺便看它落在哪：
 
 ```bash
 python3 scripts/ledger.py init      # Windows 用 python
+python3 scripts/_paths.py           # 打印最终路径 + 判定依据
 ```
 
-会在 `~/.workbuddy/deal-hunter/` 下建 `watchlist.md`、`pushed.jsonl`、`pushed-wool.jsonl`、`scan.jsonl`、`raw/`。
+**数据目录跟着宿主走，不写死**：
+
+| 情况 | 数据落在 |
+|---|---|
+| 设了环境变量 `DEAL_HUNTER_HOME` | 该路径 |
+| 装在 `<宿主>/skills/deal-hunter` | `<宿主>/deal-hunter`（WorkBuddy → `~/.workbuddy/deal-hunter`，Claude Code → `~/.claude/deal-hunter`） |
+| 装在其它位置 | `~/.deal-hunter`，不往代码仓库里写数据 |
+
+想让两个客户端共用同一份关注清单和台账，就都设同一个 `DEAL_HUNTER_HOME`。
 
 ---
 
@@ -159,10 +180,11 @@ python3 scripts/doctor.py          # 复检，退出码 0=能跑 / 1=有缺失 /
 3. 有固定 profile、关掉再开还是登录态吗？每次都是干净临时目录**等于没有**。
 4. 能拿到 cookie 并复用吗？拿不到**对 X / LINUX DO 等于零**。
 
-| 你的环境 | 浏览器现状 | 建议 |
+| 客户端（举例） | 浏览器现状 | 建议 |
 |---|---|---|
 | WorkBuddy | 内置浏览器控制连接失败时会**静默回退到自带 Chromium**：窗口收不到指令却回「✓ Done」，数据错位；而且活不过一次命令调用 | **用外置浏览器 + CDP**，别用内置那套 |
 | Hermes / OpenClaw / ChatGPT（含 Computer Use） | 一般有内置浏览器，能点能读 | **仍建议改用外置**：内置 profile 多是临时的，登录态存不住，而登录是 X、LINUX DO 的命门 |
+| 其它带浏览器工具的客户端 | 按上面四条自己判 | 有真窗口 + 固定 profile 就能用；只有 HTML 就等于没有 |
 | 纯 CLI Agent | 没有 | 只能跑直连部分，**如实告知用户**，别假装扫了 |
 
 ### 装哪个浏览器
@@ -250,7 +272,8 @@ python3 scripts/ledger.py check --title "雅培瞬感3代 动态血糖仪" --pro
 ```bash
 python3 scripts/browser.py start "https://faxian.smzdm.com/" --session deal-hunter
 python3 scripts/browser.py eval  "document.title" --session deal-hunter
-python3 scripts/browser.py cookies --session deal-hunter --save ~/.workbuddy/deal-hunter/cookies/x.json
+python3 scripts/browser.py shot  /tmp/page.png --session deal-hunter   # 截图（最小化也能拍）
+python3 scripts/browser.py cookies --session deal-hunter --save <数据目录>/cookies/x.json
 python3 scripts/browser.py stop  --session deal-hunter
 ```
 
@@ -286,6 +309,7 @@ deal-hunter/
 │   └── automation-prompt.md     定时任务提示词模板
 ├── scripts/
 │   ├── doctor.py                环境自检 + 依赖补全（--plan / --fix）
+│   ├── _paths.py                数据目录解析（不绑定宿主，可被 DEAL_HUNTER_HOME 覆盖）
 │   ├── browser.py               跨平台 CDP 控制器（零依赖，自己实现 WebSocket）
 │   ├── _compat.py               Windows 控制台编码与 stdin 兜底
 │   ├── ledger.py                商品级去重 / 扫描台账 / 回查 / 随机延迟
@@ -329,13 +353,15 @@ deal-hunter/
 
 ---
 
-## 平台支持
+## 平台与客户端支持
+
+**不限客户端**：只要它支持「技能」机制（`<配置目录>/skills/<技能名>`），就能直接用；装在哪由客户端决定，见上文「安装」。没有技能机制的客户端也能跑脚本，只是不会自动触发。
 
 | 部分 | macOS / Linux | Windows |
 |---|---|---|
 | Python 脚本 | ✓ 实测 | ✓ 代码按平台分支写，控制台编码已兜底（未实机验证） |
 | 浏览器控制 | `scripts/browser.py` ✓ 实测 | 同左，用 `DETACHED_PROCESS` 脱离父进程（未实机验证） |
-| 数据目录 | `~/.workbuddy/deal-hunter` | `%USERPROFILE%\.workbuddy\deal-hunter`，两者都可用 `DEAL_HUNTER_HOME` 覆盖 |
+| 数据目录 | 见上文「安装」，默认跟着宿主走 | 同左，Windows 下是 `%USERPROFILE%\` 下的对应目录 |
 | 已知差异 | 代理变量污染 | `python` 而非 `python3`、路径带空格要引号、控制台代码页 |
 
 Windows 细节：`python3`→`python`、`curl`→`curl.exe`、bypass 用分号、Chrome 必须独立 `user-data-dir`、杀进程按 PID、`.ps1` 存 UTF-8 BOM、中文路径加引号。详见 `references/windows.md`。

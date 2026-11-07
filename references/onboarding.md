@@ -23,8 +23,8 @@
 
 | 宿主 | 浏览器能力现状 | 结论 |
 |---|---|---|
-| **WorkBuddy** | 内置浏览器控制在连接失败时**静默回退到自带 Chromium**：屏幕上那个 Chrome 收不到指令，却回「✓ Done」，读到的是另一个浏览器的页面。而且它起的浏览器**活不过一次命令调用**。 | **必须用外置浏览器 + CDP**（`browser-cdp-control` 技能）。不要用内置那套 |
-| **QQ 浏览器（配合 WorkBuddy）** | 本机实测可用，Chromium 内核，支持 `--remote-debugging-port`。国内环境打开国内站更顺手 | 可作为 Chrome 的替代，出怪问题时优先换回 Chrome 对照 |
+| **WorkBuddy** | 内置浏览器控制在连接失败时**静默回退到自带 Chromium**：屏幕上那个 Chrome 收不到指令，却回「✓ Done」，读到的是另一个浏览器的页面。而且它起的浏览器**活不过一次命令调用**。 | **改用外置浏览器 + 自带的 `scripts/browser.py`**。不要用内置那套 |
+| **QQ 浏览器（配合 Chrome 稀缺的客户端）** | 本机实测可用，Chromium 内核，支持 `--remote-debugging-port`。国内环境打开国内站更顺手 | 可作为 Chrome 的替代，出怪问题时优先换回 Chrome 对照 |
 | **Hermes / OpenClaw / ChatGPT（含 Computer Use 类）** | 通常**有内置浏览器**，能点能读 | **仍然建议改用外置浏览器**。原因：内置浏览器的 profile 多为临时目录，关掉即丢，登录态存不住；而登录是 X、LINUX DO 这类源的命门。只能用它的时候，要明确告诉用户「登录态无法保存，每轮都要你手动登一次」 |
 | **纯 CLI Agent（无浏览器工具）** | 没有 | 只能跑 A 段直连（smzdm / V2EX）；B 段要用户自己看，**必须如实说明能力边界**，不许假装扫了 |
 
@@ -47,13 +47,33 @@ python3 scripts/doctor.py
 
 机器可读：`python3 scripts/doctor.py --json`；不想发任何请求：`--no-net`。
 
+### 顺带确认两件事：技能装哪、数据落哪
+
+**装在哪，由你这个客户端的规范决定，本技能不假设。** 保持 `<配置目录>/skills/deal-hunter` 这个结构，数据就会自动落到 `<配置目录>/deal-hunter`，不用改任何代码。认不出客户端、或者装在别处，脚本会退到 `~/.deal-hunter`。
+
+```bash
+python3 scripts/_paths.py     # 打印数据目录 / profile / cookie 的最终位置和判定依据
+```
+
+如果用户希望多个客户端（比如 WorkBuddy 和 Claude Code）共用同一份关注清单和台账，让他设 `DEAL_HUNTER_HOME` 指向同一路径。**不要自作主张搬用户已有的数据目录**，先问。
+
 ---
 
 ## 第 2 步：按自检结果补齐（缺什么补什么）
 
-### 2.1 没有 CDP 启动器 → 装 `browser-cdp-control` 技能
+### 2.1 没有浏览器控制能力 → 用本仓库自带的 `scripts/browser.py`
 
-本技能所有浏览器操作都走它，不自带。装完再跑一次 `doctor.py` 确认「浏览器控制通道」变 `✓`。
+**不需要装任何插件、技能或 node。** 启动器就在 `scripts/browser.py`，只用 Python 标准库（WebSocket 都是自己实现的），三平台同一份命令。
+
+如果 `doctor.py` 报「找不到 scripts/browser.py」，说明仓库没下全，重新 `git clone` 或 `git pull` 一次即可，不要去装别的技能。
+
+跑一次端到端确认（启动 → CDP → 执行 JS → 关闭）：
+
+```bash
+python3 scripts/browser.py start "https://faxian.smzdm.com/" --session selftest
+python3 scripts/browser.py eval  "document.title" --session selftest
+python3 scripts/browser.py stop  --session selftest
+```
 
 ### 2.2 没有 Chromium 内核浏览器 → 按这张表装
 
@@ -63,7 +83,7 @@ python3 scripts/doctor.py
 |---|---|---|---|---|
 | **Google Chrome** | ✓ | ✓ | ✓ | **首选**。CDP 支持最完整，出问题最好查 |
 | **Microsoft Edge** | ✓ | ✓ 系统自带 | ✓ | Windows 上**不用另装**，直接用，效果等同 Chrome |
-| **QQ 浏览器** | ✓ | ✓ | — | 国产 Chromium，国内站点体验好，WorkBuddy 环境配合较顺 |
+| **QQ 浏览器** | ✓ | ✓ | — | 国产 Chromium，国内站点体验好，个别客户端里比 Chrome 更稳 |
 | **Brave / Chromium** | ✓ | ✓ | ✓ | 备选 |
 | Safari | ✓ | — | — | **不能用**。走 WebDriver，不支持 CDP |
 | Firefox | ✓ | ✓ | ✓ | **不推荐**。CDP 协议不兼容，脚本会报找不到 target |

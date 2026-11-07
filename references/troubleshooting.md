@@ -5,9 +5,9 @@
 
 ---
 
-## 0. 一条铁律：不要用内置浏览器控制
+## 0. 一条铁律：不要用客户端内置的浏览器控制
 
-WorkBuddy 内置的浏览器控制（agent-browser / browser-use）在**连接失败时不报错，而是静默回退到它自带的 Chromium**。
+很多客户端（WorkBuddy、Hermes、browser-use 这类）内置的浏览器控制在**连接失败时不报错，而是静默回退到它自带的 Chromium**。
 
 于是会出现两个症状，而且它们会同时出现：
 
@@ -18,11 +18,10 @@ WorkBuddy 内置的浏览器控制（agent-browser / browser-use）在**连接�
 
 **判断方法**：看返回的页面标题和 URL 对不对得上。对不上，就是落到自带浏览器里了。
 
-**正确做法**：用 `browser-cdp-control` 技能自己起一个带调试端口的 Chrome，再用 `cdp.js` 直接发指令。中间没有中间层，行为完全确定。
+**正确做法**：用自带的 `scripts/browser.py` 起一个带调试端口的 Chrome，直接发 CDP 指令。中间没有中间层，行为完全确定。
 
 ```bash
-cd ~/.workbuddy/skills/browser-cdp-control/scripts
-./browser_cdp.sh start "<URL>" --session deal-hunter --detach
+python3 scripts/browser.py start "<URL>" --session deal-hunter
 ```
 
 ---
@@ -47,7 +46,7 @@ cd ~/.workbuddy/skills/browser-cdp-control/scripts
 **真实原因**：**代理环境污染**。命令行启动的 Chrome 会继承 shell 里的 `HTTP_PROXY` / `HTTPS_PROXY`，于是国内站流量也走了海外机房 IP。小红书、搜狗这类站对机房 IP 一律拦截。
 
 **处置**：
-- 启动 Chrome 时把代理变量摘干净（`browser_cdp.sh` 已内置 `env -u`）。
+- 启动 Chrome 时把代理变量摘干净（`browser.py` 已默认清空 `HTTP(S)_PROXY` 环境变量，并加 `--no-proxy-server`）。
 - 只给**境外站**显式加 `--proxy`。
 - 诊断出口 IP **必须用国内回显站**，别用 ipinfo.io（它走代理是正常的，会得出"整机在海外"的错误结论）：
   ```bash
@@ -109,7 +108,7 @@ cd ~/.workbuddy/skills/browser-cdp-control/scripts
 
 **处置**：
 - 加等待：`sleep 3` 或轮询标题非空再读。
-- 重新 `node cdp.js list` 拿新 id；**target id 是十六进制长串，别截断**（截成 8 位会报"target 不存在"）。
+- 重新 `python3 scripts/browser.py list --session <名字>` 拿新 id；**target id 是十六进制长串，别截断**（截成 8 位会报"target 不存在"）。
 - 静态页直接读 `document.title + body.innerText.length` 两个值一起看，比标题单独可靠。
 
 ---
@@ -134,13 +133,13 @@ cd ~/.workbuddy/skills/browser-cdp-control/scripts
 **真实原因**：这个 profile 没登录过。
 
 **处置**：
-- `node cdp.js front <targetId>` 把窗口切到前台，让用户自己扫码/输密码。
+- `python3 scripts/browser.py front <targetId> --session deal-hunter` 把窗口切到前台，让用户自己扫码/输密码。
 - **绝不代输账号密码、不代收验证码。**
-- 登录成功后**立刻**存 cookie（session cookie 关窗即失效）：
+- 登录成功后**立刻**备份 cookie（session cookie 关窗即失效）：
   ```bash
-  node cdp.js dumpcookie <targetId> ~/.workbuddy/deal-hunter/cookies/x.json
+  python3 scripts/browser.py cookies --session deal-hunter-x --save <数据目录>/cookies/x.json
   ```
-- 下次启动后 `loadcookie` 注回去；profile 目录本身也会持久化大部分登录态，两者叠加最稳。
+- 平时不用手动"注回" cookie：登录态主要在 profile 目录里，关掉重开仍在。cookie 备份是给 profile 被清掉、或换机器时兜底用的。
 
 ---
 
@@ -163,19 +162,23 @@ cd ~/.workbuddy/skills/browser-cdp-control/scripts
 
 ## 9. 截图是黑的 / 只有一半
 
-**症状**：`shot` 出来的图空白、或者缺内容。
+**症状**：截出来的图空白、或者只有一半。
 
-**真实原因**：窗口被最小化时，系统层截图拿不到内容。
+**真实原因**：用系统截图（`screencapture` / 系统截屏）时，窗口最小化或被遮挡就拍不到内容。
 
 **处置**：
-- 用 CDP 的 `Page.captureScreenshot`（`cdp.js shot` 就是），它不受窗口是否最小化影响。
-- 系统截图（`screencapture`）只用于诊断"窗口到底在不在屏幕上"，不用于取内容。
+- 用 CDP 截图，跟窗口状态无关：
+  ```bash
+  python3 scripts/browser.py shot /tmp/page.png --session deal-hunter        # 可视区域
+  python3 scripts/browser.py shot /tmp/page.png --session deal-hunter --full # 整页长图
+  ```
+- 系统截图只用于诊断"窗口到底在不在屏幕上"，不用于取内容。
 
 ---
 
 ## 10. 需要窗口在前台（要用户操作）
 
-- `node cdp.js front <targetId>`：把指定标签切到前台。
+- `python3 scripts/browser.py front <targetId> --session <名字>`：把指定标签切到前台。
 - 窗口被最小化时，先 `Browser.setWindowBounds` 置 `windowState: normal`，再 `Target.activateTarget`。
 - macOS 上 `osascript -e 'tell application "Google Chrome" to activate'` 只能激活应用，**不一定能还原最小化窗口**，别指望它。
 

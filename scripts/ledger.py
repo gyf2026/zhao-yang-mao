@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """deal-hunter 辅助脚本：商品级去重 / 扫描台账 / 随机延迟 / 快照路径 / 初始化。
 
-数据目录默认 ~/.workbuddy/deal-hunter/（环境变量 DEAL_HUNTER_HOME 可覆盖）
+数据目录与宿主无关，解析规则见 _paths.py（环境变量 DEAL_HUNTER_HOME 可覆盖）
   pushed.jsonl        已推送的好价，含商品键与价格
   pushed-wool.jsonl   已推送的羊毛
   scan.jsonl          扫描台账：每次扫到的**全部**候选（含没推的、被剔除的及原因）
@@ -19,8 +19,9 @@ from datetime import datetime
 from difflib import SequenceMatcher
 from urllib.parse import urlparse
 from _compat import fix_stdio
+from _paths import data_home
 
-HOME = os.path.expanduser(os.environ.get("DEAL_HUNTER_HOME", "~/.workbuddy/deal-hunter"))
+HOME = data_home()
 SKILL_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # 建商品键时剔除的营销噪音词（保留规格数字，如 20片 / 3代 / 128G）

@@ -107,7 +107,23 @@ python3 scripts/browser.py stop  --session selftest
 
 拿到标题就说明整条链路通了（启动 → CDP → 执行 JS → 关闭）。拿不到就按 `troubleshooting.md` 排查。
 
-## 四、失败时的判断顺序
+## 四、装在哪个客户端：目录约定
+
+**代码不假设宿主是谁。** 唯一需要遵守的约定是目录结构：`<宿主配置目录>/skills/deal-hunter`。
+
+| 客户端 | 技能目录 | 数据目录（自动推出） |
+|---|---|---|
+| WorkBuddy | `~/.workbuddy/skills/deal-hunter` | `~/.workbuddy/deal-hunter` |
+| Claude Code | `~/.claude/skills/deal-hunter`（项目级：`<项目>/.claude/skills/…`） | `~/.claude/deal-hunter` |
+| 其它客户端 | 按其文档的 skills 目录 | `<该配置目录>/deal-hunter` |
+| 无技能机制 / 装在别处 | 任意位置 | `~/.deal-hunter` |
+
+- 解析逻辑在 `scripts/_paths.py`，查一次就知道落在哪：`python3 scripts/_paths.py`。
+- 宿主目录必须在**家目录内**才被认；装在别人的代码仓库里会自动退到 `~/.deal-hunter`，不会往仓库里写数据。
+- 想让多个客户端共用一份关注清单和台账：设 `DEAL_HUNTER_HOME` 指向同一路径。
+- 旧版本把数据写死在 `~/.workbuddy/deal-hunter`。升级后如果新位置不存在、旧位置有数据，会**自动沿用旧位置**，不会丢台账；确认无误后自己 `mv` 到新位置即可。
+
+## 五、失败时的判断顺序
 
 浏览器起不来，按这个顺序排，别乱试：
 
@@ -117,13 +133,16 @@ python3 scripts/browser.py stop  --session selftest
 4. **是不是代理污染** → 国内站必须 `--no-proxy-server`（`browser.py` 默认已加）。手动加了 `--proxy` 却打不开国内站，就是这个原因。
 5. **安全软件拦截** → 少见，但 Windows 上 360 之类会拦本地端口。临时关掉验证。
 
-## 五、实测矩阵（诚实标注）
+## 六、实测矩阵（诚实标注）
 
 | 能力 | macOS 26/27 (Apple Silicon) | Windows | Linux |
 |---|---|---|---|
 | 直连脚本（smzdm / V2EX / 爱Q / ledger / pick） | ✅ 实测 | ⚠️ 代码按平台分支写的，未实机验证 | ⚠️ 同上 |
 | `doctor.py` 七项自检 | ✅ 实测 | ⚠️ 未实机验证 | ⚠️ 未实机验证 |
-| `browser.py` 启动 / 探活 / eval / cookie / 关闭 | ✅ 实测（Chrome 156 + QQ 浏览器） | ⚠️ 未实机验证（用 `DETACHED_PROCESS` 脱离父进程） | ⚠️ 未实机验证 |
+| `browser.py` 启动 / 探活 / eval / 截图 / cookie / 关闭 | ✅ 实测（Chrome 156 + QQ 浏览器） | ⚠️ 未实机验证（用 `DETACHED_PROCESS` 脱离父进程） | ⚠️ 未实机验证 |
 | 登录态保存 | ✅ 实测（profile 落盘可复用） | ⚠️ 未实机验证 | ⚠️ 未实机验证 |
+| `_paths.py` 数据目录解析（宿主识别 / 环境变量 / 兜底） | ✅ 实测三种分支 | ⚠️ 未实机验证 | ⚠️ 未实机验证 |
+| 宿主适配（WorkBuddy） | ✅ 实测 | ⚠️ 未实机验证 | — |
+| 宿主适配（Claude Code 及其它 skills 目录结构） | ⚠️ 结构兼容，未实测 | ⚠️ 未实测 | ⚠️ 未实测 |
 
 **没实机测过的平台，出了问题别急着怀疑代码逻辑**，先看这三处最常见的平台差异：进程脱离方式、路径分隔符与空格、控制台编码。遇到 Windows/Linux 的真问题，按实际现象改，改完把结论补进这张表。

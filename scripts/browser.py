@@ -20,12 +20,13 @@ Chromium 内核浏览器」，其余全部自带。
   browser.py open URL                          # 开新标签（不抢已有页）
   browser.py eval TARGET_ID "JS 表达式"         # 在页面里执行 JS，返回结果
   browser.py cookies [--session 名字] [--save 路径]   # 导出当前 profile 全部 cookie
+  browser.py shot 保存路径 [--target id] [--full]     # 截图（走 CDP，最小化也能拍）
   browser.py stop [--session 名字]              # 关掉本脚本起的实例
   browser.py front TARGET_ID                   # 把标签切到前台（需要用户登录时用）
 
 端口与 profile
   --session 名字经 CRC32 映射到 9300–9399，同名必得同端口、同 profile，可复现：
-      ~/.workbuddy/browser-profiles/<session>
+      <数据目录>/browser-profiles/<session>        （数据目录解析见 _paths.py）
 
 平台差异（都已在代码里处理）
   macOS/Linux  用 start_new_session 脱离父进程，否则 shell 一结束浏览器就被回收
@@ -37,7 +38,11 @@ import argparse, base64, binascii, json, os, platform, shutil, socket, struct
 import subprocess, sys, time, urllib.error, urllib.parse, urllib.request
 
 HOME = os.path.expanduser("~")
-PROFILE_ROOT = os.path.join(HOME, ".workbuddy", "browser-profiles")
+try:
+    from _paths import profile_root as _profile_root
+    PROFILE_ROOT = _profile_root()
+except Exception:                       # 单独拷走这个文件也能用
+    PROFILE_ROOT = os.path.join(HOME, ".deal-hunter", "browser-profiles")
 IS_WIN = platform.system() == "Windows"
 
 
@@ -390,6 +395,25 @@ def do_open(port, url):
     return r
 
 
+def do_shot(port, target_id, path, full=False):
+    """截图走 CDP，跟窗口是否最小化无关（系统截图在最小化时会拿到空白）。"""
+    t = pick_target(port, target_id)
+    params = {"format": "png"}
+    if full:
+        params["captureBeyondViewport"] = True
+    res = cdp(t["webSocketDebuggerUrl"], "Page.captureScreenshot", params)
+    data = res.get("data")
+    if not data:
+        raise SystemExit("截图失败：CDP 没返回图像数据")
+    path = os.path.abspath(os.path.expanduser(path))
+    d = os.path.dirname(path)
+    if d:
+        os.makedirs(d, exist_ok=True)
+    with open(path, "wb") as f:
+        f.write(base64.b64decode(data))
+    return {"saved": path, "bytes": os.path.getsize(path)}
+
+
 def do_cookies(port):
     v = version(port)
     ws_url = v.get("webSocketDebuggerUrl")
@@ -441,6 +465,13 @@ def main():
 
     q = sub.add_parser("front", help="把标签切到前台（要用户登录时用）")
     q.add_argument("target_id")
+    q.add_argument("--session", default="collect")
+    q.add_argument("--port", type=int)
+
+    q = sub.add_parser("shot", help="页面截图（走 CDP，窗口最小化也能拍）")
+    q.add_argument("path")
+    q.add_argument("--target", help="页面 target id，默认用第一个 page")
+    q.add_argument("--full", action="store_true", help="整页长图，不只是可视区域")
     q.add_argument("--session", default="collect")
     q.add_argument("--port", type=int)
 
@@ -531,6 +562,11 @@ def main():
         t = pick_target(port, a.target_id)
         cdp(t["webSocketDebuggerUrl"], "Page.bringToFront", {})
         print(json.dumps({"ok": True, "url": t.get("url")}, ensure_ascii=False))
+        return
+
+    if a.cmd == "shot":
+        print(json.dumps(do_shot(port, a.target, a.path, a.full), ensure_ascii=False))
+        return
         return
 
 
